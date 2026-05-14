@@ -31,8 +31,6 @@ DEFAULTS: dict = {
     "alpha_max": 180,
     "bg_dark": False,
     "invert_overlap": False,
-    "composition_mode": "none",  # "none" | "rule_of_thirds" | "golden_spiral"
-    "composition_strength": 0.3,
 }
 
 
@@ -88,64 +86,6 @@ def _fractal_noise_field(
     return field / total
 
 
-def _apply_composition_pull(
-    xs: np.ndarray, ys: np.ndarray,
-    width: int, height: int, margin: float,
-    mode: str, strength: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Pull mark positions toward compositional attraction points."""
-    if mode == "none" or strength <= 0.0:
-        return xs, ys
-
-    x_min = width  * margin
-    x_max = width  * (1.0 - margin)
-    y_min = height * margin
-    y_max = height * (1.0 - margin)
-    w_span = x_max - x_min
-    h_span = y_max - y_min
-
-    if mode == "rule_of_thirds":
-        pts = [
-            (x_min + w_span / 3,       y_min + h_span / 3),
-            (x_min + 2 * w_span / 3,   y_min + h_span / 3),
-            (x_min + w_span / 3,       y_min + 2 * h_span / 3),
-            (x_min + 2 * w_span / 3,   y_min + 2 * h_span / 3),
-        ]
-    elif mode == "golden_spiral":
-        # Fibonacci phyllotaxis: golden angle spacing gives even, organic distribution
-        golden_angle = math.pi * (3.0 - math.sqrt(5.0))
-        cx = (x_min + x_max) * 0.5
-        cy = (y_min + y_max) * 0.5
-        max_r = min(w_span, h_span) * 0.45
-        pts = [
-            (cx + max_r * math.sqrt((k + 1) / 16) * math.cos(k * golden_angle),
-             cy + max_r * math.sqrt((k + 1) / 16) * math.sin(k * golden_angle))
-            for k in range(16)
-        ]
-    else:
-        return xs, ys
-
-    # Each mark is pulled toward the Gaussian-weighted centroid of all points,
-    # so nearby attraction points exert stronger influence than distant ones.
-    sigma = min(w_span, h_span) * 0.25
-    total_w  = np.zeros(len(xs))
-    target_x = np.zeros(len(xs))
-    target_y = np.zeros(len(xs))
-    for px, py in pts:
-        dx = px - xs
-        dy = py - ys
-        wt = np.exp(-(dx * dx + dy * dy) / (2.0 * sigma * sigma))
-        total_w  += wt
-        target_x += wt * px
-        target_y += wt * py
-    target_x /= total_w + 1e-9
-    target_y /= total_w + 1e-9
-
-    effective = math.sqrt(strength)
-    return (xs + (target_x - xs) * effective,
-            ys + (target_y - ys) * effective)
-
-
 # ── Main generation entry point ───────────────────────────────────────────────────────────
 
 def generate(config: dict, scale: float = 1.0) -> Image.Image:
@@ -174,8 +114,6 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     a_max         = max(a_min + 1, int(cfg["alpha_max"]))
     bg_dark       = bool(cfg["bg_dark"])
     invert_overlap  = bool(cfg["invert_overlap"])
-    comp_mode       = str(cfg["composition_mode"])
-    comp_strength   = float(cfg["composition_strength"])
 
     bg = (18,  18,  18)  if bg_dark else (245, 245, 240)
     fg = (220, 220, 215) if bg_dark else (20,  20,  25)
@@ -200,8 +138,6 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
         effective = math.sqrt(gravity)
         xs = xs + dx * effective * weight
         ys = ys + dy * effective * weight
-
-    xs, ys = _apply_composition_pull(xs, ys, width, height, margin, comp_mode, comp_strength)
 
     # Log-normal length distribution: median controls centre, spread controls the tail.
     log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)

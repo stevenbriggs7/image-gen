@@ -169,23 +169,6 @@ with st.container(height=500, border=False):
         help="How quickly gravity weakens with distance. 0 = uniform pull everywhere, 1 = only nearby marks affected.",
         key="shared_gravity_falloff",
     )
-    composition_mode = st.selectbox(
-        "Composition",
-        ["none", "rule_of_thirds", "golden_spiral"],
-        format_func={"none": "None", "rule_of_thirds": "Rule of thirds", "golden_spiral": "Golden spiral"}.get,
-        help="Bias mark density toward aesthetically intentional positions.",
-        key="shared_comp_mode",
-    )
-    if composition_mode != "none":
-        composition_strength = st.slider(
-            "Composition strength", 0.05, 1.0, defaults["composition_strength"],
-            step=0.05, format="%.2f",
-            help="How strongly marks are pulled toward the composition points.",
-            key="shared_comp_strength",
-        )
-    else:
-        composition_strength = 0.0
-
     # ── Color & Output (shared) ───────────────────────────────────────────────
     st.subheader("Color & Output")
     bg_dark = st.toggle("Dark background", value=defaults["bg_dark"], key="shared_bg")
@@ -220,8 +203,6 @@ if gen_type == "Lines":
         "alpha_min": alpha_min, "alpha_max": alpha_max,
         "bg_dark": bg_dark,
         "invert_overlap": invert_overlap,
-        "composition_mode": composition_mode,
-        "composition_strength": float(composition_strength),
     }
     label = "lines"
 else:
@@ -236,8 +217,6 @@ else:
         "alpha_min": alpha_min, "alpha_max": alpha_max,
         "bg_dark": bg_dark,
         "invert_overlap": invert_overlap,
-        "composition_mode": composition_mode,
-        "composition_strength": float(composition_strength),
     }
     label = "circles"
 
@@ -270,10 +249,9 @@ with st.spinner("Rendering..."):
 preview_img = Image.open(io.BytesIO(preview_bytes))
 img_placeholder.image(preview_img, use_container_width=True)
 gravity_note = f" · gravity {gravity:.2f}" if gravity > 0 else ""
-comp_note = f" · {composition_mode.replace('_', ' ')}" if composition_mode != "none" else ""
 caption_placeholder.caption(
     f"Preview {preview_img.width}x{preview_img.height} px "
-    f"- output {out_w}x{out_h} px{gravity_note}{comp_note}"
+    f"- output {out_w}x{out_h} px{gravity_note}"
 )
 
 # ── Export ─────────────────────────────────────────────────────────────────────
