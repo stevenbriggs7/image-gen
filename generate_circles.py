@@ -26,6 +26,7 @@ DEFAULTS: dict = {
     "radius_median": 14.0,     # median radius in px at full resolution
     "radius_spread": 0.65,     # log-sigma: 0.2 = uniform, 1.2 = extreme variation
     "margin": 0.0,             # fraction of each edge to exclude (0-0.45)
+    "gravity": 0.0,            # pull toward centre: 0 = uniform, 1 = fully centred
     "filled": True,            # True = solid disc, False = ring outline
     "stroke_width": 1.5,       # ring thickness when filled=False
     "alpha_min": 20,
@@ -52,6 +53,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     r_median     = float(cfg["radius_median"]) * scale
     r_spread     = float(cfg["radius_spread"])
     margin       = float(cfg["margin"])
+    gravity      = float(cfg["gravity"])
     filled       = bool(cfg["filled"])
     stroke_w     = max(1, round(float(cfg["stroke_width"])))
     a_min        = int(cfg["alpha_min"])
@@ -68,6 +70,10 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     y_min, y_max = height * margin, height * (1.0 - margin)
     xs = rng.uniform(x_min, x_max, n_circles)
     ys = rng.uniform(y_min, y_max, n_circles)
+    if gravity > 0.0:
+        cx, cy = (x_min + x_max) * 0.5, (y_min + y_max) * 0.5
+        xs = xs + (cx - xs) * gravity
+        ys = ys + (cy - ys) * gravity
 
     # Base radii: log-normal
     log_r = rng.normal(math.log(max(r_median, 1.0)), r_spread, n_circles)

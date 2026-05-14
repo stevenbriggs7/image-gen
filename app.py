@@ -27,12 +27,13 @@ header[data-testid="stHeader"] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
-# Image placeholder at top
+# Image placeholder at top — filled after params are collected
 img_placeholder     = st.empty()
 caption_placeholder = st.empty()
 
-# Controls panel
-with st.container(height=480, border=False):
+# ── Controls panel ─────────────────────────────────────────────────────────────
+
+with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
@@ -43,7 +44,7 @@ with st.container(height=480, border=False):
 
     st.divider()
 
-    # Shared: seed
+    # Seed (shared)
     defaults = gen_lines.DEFAULTS if gen_type == "Lines" else gen_circles.DEFAULTS
     col_seed, col_btn = st.columns([5, 1])
     with col_seed:
@@ -55,20 +56,17 @@ with st.container(height=480, border=False):
             seed = random.randint(0, 99999)
             st.rerun()
 
-    # Lines controls
+    # ── Lines controls ────────────────────────────────────────────────────────
     if gen_type == "Lines":
         D = gen_lines.DEFAULTS
 
         st.subheader("Lines")
-        n_lines       = st.slider("Count", 50, 5000, D["n_lines"], step=50)
-        length_median = st.slider("Length median (px)", 5, 400, int(D["length_median"]))
+        n_lines       = st.slider("Count", 50, 5000, D["n_lines"], step=50, key="l_count")
+        length_median = st.slider("Length median (px)", 5, 400, int(D["length_median"]), key="l_len_med")
         length_spread = st.slider(
             "Length variation", 0.1, 2.0, D["length_spread"], step=0.05, format="%.2f",
             help="Log-normal spread. 0.1 = uniform, 1.5 = extreme.",
-        )
-        margin = st.slider(
-            "Edge margin", 0.0, 0.45, D["margin"], step=0.01, format="%.2f",
-            help="Fraction of the image to leave empty at each edge.",
+            key="l_len_spread",
         )
 
         st.subheader("Flow Field")
@@ -76,73 +74,94 @@ with st.container(height=480, border=False):
             "Noise scale", 0.0005, 0.025, D["noise_scale"],
             step=0.0005, format="%.4f",
             help="Low = sweeping coherent directions. High = chaotic.",
+            key="l_noise_scale",
         )
         angle_range = st.slider(
             "Angle range (x 2pi)", 0.05, 1.0, D["angle_range"],
             step=0.05, format="%.2f",
             help="1.0 = any direction; 0.25 = constrained to a quadrant.",
+            key="l_angle_range",
         )
 
         st.subheader("Stroke")
         sw_min, sw_max = st.slider(
             "Width range (px)", 0.5, 8.0,
             (D["stroke_width_min"], D["stroke_width_max"]),
-            step=0.5,
+            step=0.5, key="l_sw",
         )
         alpha_min, alpha_max = st.slider(
-            "Opacity range (0-255)", 0, 255, (D["alpha_min"], D["alpha_max"]),
+            "Opacity range (0-255)", 0, 255,
+            (D["alpha_min"], D["alpha_max"]),
+            key="l_alpha",
         )
 
-    # Circles controls
+    # ── Circles controls ──────────────────────────────────────────────────────
     else:
         D = gen_circles.DEFAULTS
 
         st.subheader("Circles")
-        n_circles      = st.slider("Count", 50, 3000, D["n_circles"], step=50)
-        radius_median  = st.slider("Radius median (px)", 2, 200, int(D["radius_median"]))
-        radius_spread  = st.slider(
+        n_circles     = st.slider("Count", 50, 3000, D["n_circles"], step=50, key="c_count")
+        radius_median = st.slider("Radius median (px)", 2, 200, int(D["radius_median"]), key="c_rad_med")
+        radius_spread = st.slider(
             "Radius variation", 0.1, 2.0, D["radius_spread"], step=0.05, format="%.2f",
-            help="Log-normal spread. 0.2 = uniform sizes, 1.2 = extreme range.",
-        )
-        margin = st.slider(
-            "Edge margin", 0.0, 0.45, D["margin"], step=0.01, format="%.2f",
-            help="Fraction of the image to leave empty at each edge.",
+            help="Log-normal spread. 0.2 = uniform, 1.2 = extreme range.",
+            key="c_rad_spread",
         )
 
         st.subheader("Noise Field")
         noise_scale = st.slider(
             "Noise scale", 0.0005, 0.025, D["noise_scale"],
             step=0.0005, format="%.4f",
-            help="Controls the spatial scale of size clustering.",
+            help="Controls the spatial scale of radius clustering.",
+            key="c_noise_scale",
         )
         noise_influence = st.slider(
             "Noise influence", 0.0, 1.5, D["noise_influence"],
             step=0.05, format="%.2f",
-            help="How strongly the field modulates radius. 0 = pure random, 1 = strong clustering.",
+            help="How strongly the field modulates radius. 0 = pure random.",
+            key="c_noise_inf",
         )
 
         st.subheader("Style")
         filled = st.toggle("Filled discs", value=D["filled"],
-                           help="Off = ring outlines instead of solid discs.")
+                           help="Off = ring outlines.", key="c_filled")
         if not filled:
-            stroke_w = st.slider("Ring thickness (px)", 0.5, 6.0, D["stroke_width"], step=0.5)
+            stroke_w = st.slider("Ring thickness (px)", 0.5, 6.0, D["stroke_width"],
+                                 step=0.5, key="c_stroke_w")
         else:
             stroke_w = D["stroke_width"]
 
         alpha_min, alpha_max = st.slider(
-            "Opacity range (0-255)", 0, 255, (D["alpha_min"], D["alpha_max"]),
+            "Opacity range (0-255)", 0, 255,
+            (D["alpha_min"], D["alpha_max"]),
+            key="c_alpha",
         )
 
-    # Shared: color + output
+    # ── Composition (shared) ──────────────────────────────────────────────────
+    st.subheader("Composition")
+    margin = st.slider(
+        "Edge margin", 0.0, 0.45, defaults["margin"],
+        step=0.01, format="%.2f",
+        help="Fraction of the image to leave empty at each edge.",
+        key="shared_margin",
+    )
+    gravity = st.slider(
+        "Centre gravity", 0.0, 0.95, defaults["gravity"],
+        step=0.05, format="%.2f",
+        help="Pulls positions toward the centre. 0 = uniform spread, 0.9 = tightly clustered.",
+        key="shared_gravity",
+    )
+
+    # ── Color & Output (shared) ───────────────────────────────────────────────
     st.subheader("Color & Output")
-    bg_dark = st.toggle("Dark background", value=defaults["bg_dark"])
+    bg_dark = st.toggle("Dark background", value=defaults["bg_dark"], key="shared_bg")
     out_w = st.select_slider(
         "Width (px)", [400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
-        value=defaults["output_width"],
+        value=defaults["output_width"], key="shared_out_w",
     )
     out_h = st.select_slider(
         "Height (px)", [300, 400, 600, 800, 1000, 1200, 1600, 2000, 3000],
-        value=defaults["output_height"],
+        value=defaults["output_height"], key="shared_out_h",
     )
 
     st.divider()
@@ -153,7 +172,8 @@ with st.container(height=480, border=False):
         st.caption("Preview updates automatically. Render for full-res export.")
 
 
-# Assemble config
+# ── Assemble config ────────────────────────────────────────────────────────────
+
 if gen_type == "Lines":
     config = {
         "seed": int(seed),
@@ -161,7 +181,7 @@ if gen_type == "Lines":
         "n_lines": n_lines,
         "noise_scale": noise_scale, "angle_range": angle_range,
         "length_median": float(length_median), "length_spread": float(length_spread),
-        "margin": float(margin),
+        "margin": float(margin), "gravity": float(gravity),
         "stroke_width_min": sw_min, "stroke_width_max": sw_max,
         "alpha_min": alpha_min, "alpha_max": alpha_max,
         "bg_dark": bg_dark,
@@ -174,13 +194,15 @@ else:
         "n_circles": n_circles,
         "noise_scale": noise_scale, "noise_influence": float(noise_influence),
         "radius_median": float(radius_median), "radius_spread": float(radius_spread),
-        "margin": float(margin),
+        "margin": float(margin), "gravity": float(gravity),
         "filled": filled, "stroke_width": stroke_w,
         "alpha_min": alpha_min, "alpha_max": alpha_max,
         "bg_dark": bg_dark,
     }
     label = "circles"
 
+
+# ── Cached generation ──────────────────────────────────────────────────────────
 
 @st.cache_data(max_entries=40, show_spinner=False)
 def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
@@ -196,7 +218,8 @@ def _cfg_key(cfg: dict) -> tuple:
     return tuple(x for pair in sorted(cfg.items()) for x in pair)
 
 
-# Render preview
+# ── Render preview ─────────────────────────────────────────────────────────────
+
 PREVIEW_MAX_W = 900
 preview_scale = min(PREVIEW_MAX_W / out_w, 1.0)
 key = _cfg_key(config)
@@ -211,7 +234,8 @@ caption_placeholder.caption(
     f"- output {out_w}x{out_h} px"
 )
 
-# Export
+# ── Export ─────────────────────────────────────────────────────────────────────
+
 if render_full:
     with st.spinner(f"Rendering {out_w}x{out_h} px..."):
         full_bytes = _render(gen_type, key, 1.0)

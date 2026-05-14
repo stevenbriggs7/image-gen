@@ -23,6 +23,7 @@ DEFAULTS: dict = {
     "length_median": 60.0,   # median line length in px (log-normal)
     "length_spread": 0.6,    # log-sigma: 0.1 = uniform, 1.5 = extreme variation
     "margin": 0.0,           # fraction of each edge to exclude (0-0.45)
+    "gravity": 0.0,          # pull toward centre: 0 = uniform, 1 = fully centred
     "stroke_width_min": 1.0,
     "stroke_width_max": 2.5,
     "alpha_min": 50,         # 0-255
@@ -103,6 +104,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     l_median      = float(cfg["length_median"]) * scale
     l_spread      = float(cfg["length_spread"])
     margin        = float(cfg["margin"])
+    gravity       = float(cfg["gravity"])
     sw_min        = float(cfg["stroke_width_min"])
     sw_max        = float(cfg["stroke_width_max"])
     a_min         = int(cfg["alpha_min"])
@@ -119,6 +121,10 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     y_min, y_max = height * margin, height * (1.0 - margin)
     xs = rng.uniform(x_min, x_max, n_lines)
     ys = rng.uniform(y_min, y_max, n_lines)
+    if gravity > 0.0:
+        cx, cy = (x_min + x_max) * 0.5, (y_min + y_max) * 0.5
+        xs = xs + (cx - xs) * gravity
+        ys = ys + (cy - ys) * gravity
 
     # Log-normal length distribution: median controls centre, spread controls the tail.
     log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)
