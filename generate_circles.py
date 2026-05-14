@@ -15,7 +15,7 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw
 
-from generate import _fractal_noise_field
+from generate import _fractal_noise_field, _apply_composition_pull
 
 DEFAULTS: dict = {
     "seed": 42,
@@ -34,6 +34,9 @@ DEFAULTS: dict = {
     "alpha_min": 20,
     "alpha_max": 110,
     "bg_dark": False,
+    "invert_overlap": False,
+    "composition_mode": "none",  # "none" | "rule_of_thirds" | "golden_spiral"
+    "composition_strength": 0.3,
 }
 
 
@@ -62,6 +65,9 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     a_min           = int(cfg["alpha_min"])
     a_max           = max(a_min + 1, int(cfg["alpha_max"]))
     bg_dark         = bool(cfg["bg_dark"])
+    invert_overlap  = bool(cfg["invert_overlap"])
+    comp_mode       = str(cfg["composition_mode"])
+    comp_strength   = float(cfg["composition_strength"])
 
     bg = (18,  18,  18)  if bg_dark else (245, 245, 240)
     fg = (220, 220, 215) if bg_dark else (20,  20,  25)
@@ -87,6 +93,8 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
         xs = xs + dx * effective * weight
         ys = ys + dy * effective * weight
 
+    xs, ys = _apply_composition_pull(xs, ys, width, height, margin, comp_mode, comp_strength)
+
     # Base radii: log-normal
     log_r = rng.normal(math.log(max(r_median, 1.0)), r_spread, n_circles)
     max_r = max(width, height) * 0.12
@@ -107,24 +115,49 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     # Draw largest circles first so small ones appear on top
     order = np.argsort(radii)[::-1]
 
-    # Pre-blend each alpha level against the background.
-    # Pillow's ImageDraw does not composite alpha, so we encode opacity as a
-    # lighter/darker shade rather than using the RGBA channel.
-    color_lut: dict[int, tuple[int, int, int]] = {}
-    for a in range(a_min, a_max):
-        t = a / 255.0
-        color_lut[a] = tuple(int(bg[j] + (fg[j] - bg[j]) * t) for j in range(3))  # type: ignore[misc]
+    img = Image.new("RGB", (width, height), bg)
 
-    img  = Image.new("RGB", (width, height), bg)
-    draw = ImageDraw.Draw(img)
+    if invert_overlap:
+        # XOR-style inversion: each circle flips the tone of pixels beneath it.
+        # Overlapping circles cancel, creating a photographic-negative effect at intersections.
+        # Pure numpy bounding-box approach keeps this fast even at high circle counts.
+        canvas_arr = np.array(img, dtype=np.float32)
+        for i in order:
+            x, y, r = float(xs[i]), float(ys[i]), float(radii[i])
+            t = float(alphas[i]) / 255.0
 
-    for i in order:
-        x, y, r = float(xs[i]), float(ys[i]), float(radii[i])
-        color = color_lut.get(int(alphas[i]), fg)
-        bbox = [x - r, y - r, x + r, y + r]
-        if filled:
-            draw.ellipse(bbox, fill=color)
-        else:
-            draw.ellipse(bbox, outline=color, width=stroke_w)
+            xl = max(0, int(x - r) - 1)
+            xh = min(width,  int(x + r) + 2)
+            yl = max(0, int(y - r) - 1)
+            yh = min(height, int(y + r) + 2)
+            if xl >= xh or yl >= yh:
+                continue
+
+            sy, sx = np.mgrid[yl:yh, xl:xh]
+            dist_sq = (sx.astype(np.float32) - x) ** 2 + (sy.astype(np.float32) - y) ** 2
+            sub_mask = dist_sq <= r * r
+
+            sub = canvas_arr[yl:yh, xl:xh]
+            sub[sub_mask] = np.clip(sub[sub_mask] * (1.0 - 2.0 * t) + 255.0 * t, 0.0, 255.0)
+
+        img = Image.fromarray(canvas_arr.astype(np.uint8), "RGB")
+    else:
+        # Pre-blend each alpha level against the background.
+        # Pillow's ImageDraw does not composite alpha, so we encode opacity as a
+        # lighter/darker shade rather than using the RGBA channel.
+        color_lut: dict[int, tuple[int, int, int]] = {}
+        for a in range(a_min, a_max):
+            t = a / 255.0
+            color_lut[a] = tuple(int(bg[j] + (fg[j] - bg[j]) * t) for j in range(3))  # type: ignore[misc]
+
+        draw = ImageDraw.Draw(img)
+        for i in order:
+            x, y, r = float(xs[i]), float(ys[i]), float(radii[i])
+            color = color_lut.get(int(alphas[i]), fg)
+            bbox = [x - r, y - r, x + r, y + r]
+            if filled:
+                draw.ellipse(bbox, fill=color)
+            else:
+                draw.ellipse(bbox, outline=color, width=stroke_w)
 
     return img

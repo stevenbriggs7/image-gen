@@ -30,6 +30,9 @@ DEFAULTS: dict = {
     "alpha_min": 50,         # 0-255
     "alpha_max": 180,
     "bg_dark": False,
+    "invert_overlap": False,
+    "composition_mode": "none",  # "none" | "rule_of_thirds" | "golden_spiral"
+    "composition_strength": 0.3,
 }
 
 
@@ -85,6 +88,64 @@ def _fractal_noise_field(
     return field / total
 
 
+def _apply_composition_pull(
+    xs: np.ndarray, ys: np.ndarray,
+    width: int, height: int, margin: float,
+    mode: str, strength: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Pull mark positions toward compositional attraction points."""
+    if mode == "none" or strength <= 0.0:
+        return xs, ys
+
+    x_min = width  * margin
+    x_max = width  * (1.0 - margin)
+    y_min = height * margin
+    y_max = height * (1.0 - margin)
+    w_span = x_max - x_min
+    h_span = y_max - y_min
+
+    if mode == "rule_of_thirds":
+        pts = [
+            (x_min + w_span / 3,       y_min + h_span / 3),
+            (x_min + 2 * w_span / 3,   y_min + h_span / 3),
+            (x_min + w_span / 3,       y_min + 2 * h_span / 3),
+            (x_min + 2 * w_span / 3,   y_min + 2 * h_span / 3),
+        ]
+    elif mode == "golden_spiral":
+        # Fibonacci phyllotaxis: golden angle spacing gives even, organic distribution
+        golden_angle = math.pi * (3.0 - math.sqrt(5.0))
+        cx = (x_min + x_max) * 0.5
+        cy = (y_min + y_max) * 0.5
+        max_r = min(w_span, h_span) * 0.45
+        pts = [
+            (cx + max_r * math.sqrt((k + 1) / 16) * math.cos(k * golden_angle),
+             cy + max_r * math.sqrt((k + 1) / 16) * math.sin(k * golden_angle))
+            for k in range(16)
+        ]
+    else:
+        return xs, ys
+
+    # Each mark is pulled toward the Gaussian-weighted centroid of all points,
+    # so nearby attraction points exert stronger influence than distant ones.
+    sigma = min(w_span, h_span) * 0.25
+    total_w  = np.zeros(len(xs))
+    target_x = np.zeros(len(xs))
+    target_y = np.zeros(len(xs))
+    for px, py in pts:
+        dx = px - xs
+        dy = py - ys
+        wt = np.exp(-(dx * dx + dy * dy) / (2.0 * sigma * sigma))
+        total_w  += wt
+        target_x += wt * px
+        target_y += wt * py
+    target_x /= total_w + 1e-9
+    target_y /= total_w + 1e-9
+
+    effective = math.sqrt(strength)
+    return (xs + (target_x - xs) * effective,
+            ys + (target_y - ys) * effective)
+
+
 # ── Main generation entry point ───────────────────────────────────────────────────────────
 
 def generate(config: dict, scale: float = 1.0) -> Image.Image:
@@ -112,6 +173,9 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     a_min         = int(cfg["alpha_min"])
     a_max         = max(a_min + 1, int(cfg["alpha_max"]))
     bg_dark       = bool(cfg["bg_dark"])
+    invert_overlap  = bool(cfg["invert_overlap"])
+    comp_mode       = str(cfg["composition_mode"])
+    comp_strength   = float(cfg["composition_strength"])
 
     bg = (18,  18,  18)  if bg_dark else (245, 245, 240)
     fg = (220, 220, 215) if bg_dark else (20,  20,  25)
@@ -136,6 +200,8 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
         effective = math.sqrt(gravity)
         xs = xs + dx * effective * weight
         ys = ys + dy * effective * weight
+
+    xs, ys = _apply_composition_pull(xs, ys, width, height, margin, comp_mode, comp_strength)
 
     # Log-normal length distribution: median controls centre, spread controls the tail.
     log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)
@@ -163,21 +229,57 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     x1s = xs + cos_a * halves
     y1s = ys + sin_a * halves
 
-    # Precompute blended colours for every alpha level in [a_min, a_max)
-    color_lut: dict[int, tuple[int, int, int]] = {}
-    for a in range(a_min, a_max):
-        t = a / 255.0
-        color_lut[a] = tuple(int(bg[i] + (fg[i] - bg[i]) * t) for i in range(3))  # type: ignore[misc]
+    img = Image.new("RGB", (width, height), bg)
 
-    # Draw
-    img  = Image.new("RGB", (width, height), bg)
-    draw = ImageDraw.Draw(img)
+    if invert_overlap:
+        # XOR-style inversion: each line flips the tone of pixels beneath it.
+        # Lines crossing each other cancel out, creating lattice/moiré effects.
+        # Uses bounding-box optimisation so only pixels near each line are touched.
+        canvas_arr = np.array(img, dtype=np.float32)
+        for i in range(n_lines):
+            x0, y0 = float(x0s[i]), float(y0s[i])
+            x1, y1 = float(x1s[i]), float(y1s[i])
+            w  = max(1.0, float(widths[i]))
+            t  = float(alphas[i]) / 255.0
 
-    for i in range(n_lines):
-        draw.line(
-            [(float(x0s[i]), float(y0s[i])), (float(x1s[i]), float(y1s[i]))],
-            fill=color_lut.get(int(alphas[i]), fg),
-            width=max(1, round(float(widths[i]))),
-        )
+            pad = int(w) + 2
+            xl = max(0, int(min(x0, x1)) - pad)
+            xh = min(width,  int(max(x0, x1)) + pad + 1)
+            yl = max(0, int(min(y0, y1)) - pad)
+            yh = min(height, int(max(y0, y1)) + pad + 1)
+            if xl >= xh or yl >= yh:
+                continue
+
+            sy, sx = np.mgrid[yl:yh, xl:xh]
+            fsx = sx.astype(np.float32)
+            fsy = sy.astype(np.float32)
+            dx, dy = x1 - x0, y1 - y0
+            lsq = dx * dx + dy * dy
+            if lsq < 1.0:
+                dist = np.sqrt((fsx - x0) ** 2 + (fsy - y0) ** 2)
+            else:
+                tp = np.clip(((fsx - x0) * dx + (fsy - y0) * dy) / lsq, 0.0, 1.0)
+                dist = np.sqrt((fsx - x0 - tp * dx) ** 2 + (fsy - y0 - tp * dy) ** 2)
+
+            sub_mask = dist <= w * 0.5
+            sub = canvas_arr[yl:yh, xl:xh]
+            # t=1 → full inversion (255-p), t=0 → no change; overlapping lines cancel
+            sub[sub_mask] = np.clip(sub[sub_mask] * (1.0 - 2.0 * t) + 255.0 * t, 0.0, 255.0)
+
+        img = Image.fromarray(canvas_arr.astype(np.uint8), "RGB")
+    else:
+        # Precompute blended colours for every alpha level in [a_min, a_max)
+        color_lut: dict[int, tuple[int, int, int]] = {}
+        for a in range(a_min, a_max):
+            t = a / 255.0
+            color_lut[a] = tuple(int(bg[i] + (fg[i] - bg[i]) * t) for i in range(3))  # type: ignore[misc]
+
+        draw = ImageDraw.Draw(img)
+        for i in range(n_lines):
+            draw.line(
+                [(float(x0s[i]), float(y0s[i])), (float(x1s[i]), float(y1s[i]))],
+                fill=color_lut.get(int(alphas[i]), fg),
+                width=max(1, round(float(widths[i]))),
+            )
 
     return img
