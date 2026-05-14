@@ -1,1 +1,128 @@
-\"\"\"\nGenerative circles: scattered, noise-modulated rings and discs.\n\nMathematical principles:\n  - Same fractal value noise field as the lines generator.\n  - Noise drives radius modulation: coherent regions of large/small circles\n    emerge naturally from the field, echoing biological cell arrangements.\n  - Radii follow a log-normal base distribution (heavy tail = rare large circles).\n  - Circles are drawn largest-first so fine marks read on top -- painter's algorithm.\n  - Mark colour is pre-blended against background by the alpha fraction, giving\n    correct opacity without requiring slow per-circle layer compositing.\n\"\"\"\n\nimport math\nimport numpy as np\nfrom PIL import Image, ImageDraw\n\nfrom generate import _fractal_noise_field\n\nDEFAULTS: dict = {\n    \"seed\": 42,\n    \"output_width\": 1200,\n    \"output_height\": 800,\n    \"n_circles\": 700,\n    \"noise_scale\": 0.004,      # spatial frequency of the radius-modulation field\n    \"noise_influence\": 0.5,    # 0 = pure log-normal, 1 = field doubles/halves radii\n    \"radius_median\": 14.0,     # median radius in px at full resolution\n    \"radius_spread\": 0.65,     # log-sigma: 0.2 = uniform, 1.2 = extreme variation\n    \"margin\": 0.0,             # fraction of each edge to exclude (0-0.45)\n    \"gravity\": 0.0,            # pull toward centre: 0 = uniform, 1 = fully centred\n    \"gravity_falloff\": 0.0,    # 0 = uniform effect, 1 = only nearby marks affected\n    \"filled\": True,            # True = solid disc, False = ring outline\n    \"stroke_width\": 1.5,       # ring thickness when filled=False\n    \"alpha_min\": 20,\n    \"alpha_max\": 110,\n    \"bg_dark\": False,\n}\n\n\ndef generate(config: dict, scale: float = 1.0) -> Image.Image:\n    \"\"\"\n    Render scattered circles and return a PIL Image.\n\n    scale < 1.0 produces a proportionally smaller image (useful for previews)\n    while preserving the spatial character of the noise field.\n    \"\"\"\n    cfg = {**DEFAULTS, **config}\n\n    seed            = int(cfg[\"seed\"])\n    width           = max(10, int(cfg[\"output_width\"]  * scale))\n    height          = max(10, int(cfg[\"output_height\"] * scale))\n    n_circles       = int(cfg[\"n_circles\"])\n    ns              = float(cfg[\"noise_scale\"]) / max(scale, 0.05)\n    noise_inf       = float(cfg[\"noise_influence\"])\n    r_median        = float(cfg[\"radius_median\"]) * scale\n    r_spread        = float(cfg[\"radius_spread\"])\n    margin          = float(cfg[\"margin\"])\n    gravity         = float(cfg[\"gravity\"])\n    gravity_falloff = float(cfg[\"gravity_falloff\"])\n    filled          = bool(cfg[\"filled\"])\n    stroke_w        = max(1, round(float(cfg[\"stroke_width\"])))\n    a_min           = int(cfg[\"alpha_min\"])\n    a_max           = max(a_min + 1, int(cfg[\"alpha_max\"]))\n    bg_dark         = bool(cfg[\"bg_dark\"])\n\n    bg = (18,  18,  18)  if bg_dark else (245, 245, 240)\n    fg = (220, 220, 215) if bg_dark else (20,  20,  25)\n\n    rng = np.random.default_rng(seed)\n\n    # Positions constrained by margin, then optionally pulled toward centre\n    x_min, x_max = width  * margin, width  * (1.0 - margin)\n    y_min, y_max = height * margin, height * (1.0 - margin)\n    xs = rng.uniform(x_min, x_max, n_circles)\n    ys = rng.uniform(y_min, y_max, n_circles)\n    if gravity > 0.0:\n        cx, cy = (x_min + x_max) * 0.5, (y_min + y_max) * 0.5\n        dx, dy = cx - xs, cy - ys\n        if gravity_falloff > 0.0:\n            canvas_r = 0.5 * math.sqrt((x_max - x_min) ** 2 + (y_max - y_min) ** 2)\n            d = np.sqrt(dx ** 2 + dy ** 2)\n            weight = np.exp(-gravity_falloff * 5.0 * d / (canvas_r + 1e-9))\n        else:\n            weight = 1.0\n        xs = xs + dx * gravity * weight\n        ys = ys + dy * gravity * weight\n\n    # Base radii: log-normal\n    log_r = rng.normal(math.log(max(r_median, 1.0)), r_spread, n_circles)\n    max_r = max(width, height) * 0.12\n    base_radii = np.clip(np.exp(log_r), 1.0 * scale, max_r)\n\n    # Modulate radii by the noise field at each circle's position.\n    # Noise values approx [-1, 1]; map to a multiplier centred at 1.0.\n    noise_field = _fractal_noise_field(width, height, ns, seed=seed + 99991)\n    xi = np.clip(xs.astype(np.intp), 0, width  - 1)\n    yi = np.clip(ys.astype(np.intp), 0, height - 1)\n    nv = noise_field[yi, xi]\n    modulation = np.clip(1.0 + nv * noise_inf, 0.15, 2.0)\n    radii = np.clip(base_radii * modulation, 1.0 * scale, max_r * 1.5)\n\n    # Alphas\n    alphas = rng.integers(a_min, a_max, n_circles)\n\n    # Draw largest circles first so small ones appear on top\n    order = np.argsort(radii)[::-1]\n\n    # Pre-blend each alpha level against the background.\n    # Pillow's ImageDraw does not composite alpha, so we encode opacity as a\n    # lighter/darker shade rather than using the RGBA channel.\n    color_lut: dict[int, tuple[int, int, int]] = {}\n    for a in range(a_min, a_max):\n        t = a / 255.0\n        color_lut[a] = tuple(int(bg[j] + (fg[j] - bg[j]) * t) for j in range(3))  # type: ignore[misc]\n\n    img  = Image.new(\"RGB\", (width, height), bg)\n    draw = ImageDraw.Draw(img)\n\n    for i in order:\n        x, y, r = float(xs[i]), float(ys[i]), float(radii[i])\n        color = color_lut.get(int(alphas[i]), fg)\n        bbox = [x - r, y - r, x + r, y + r]\n        if filled:\n            draw.ellipse(bbox, fill=color)\n        else:\n            draw.ellipse(bbox, outline=color, width=stroke_w)\n\n    return img\n
+"""
+Generative circles: scattered, noise-modulated rings and discs.
+
+Mathematical principles:
+  - Same fractal value noise field as the lines generator.
+  - Noise drives radius modulation: coherent regions of large/small circles
+    emerge naturally from the field, echoing biological cell arrangements.
+  - Radii follow a log-normal base distribution (heavy tail = rare large circles).
+  - Circles are drawn largest-first so fine marks read on top -- painter's algorithm.
+  - Mark colour is pre-blended against background by the alpha fraction, giving
+    correct opacity without requiring slow per-circle layer compositing.
+"""
+
+import math
+import numpy as np
+from PIL import Image, ImageDraw
+
+from generate import _fractal_noise_field
+
+DEFAULTS: dict = {
+    "seed": 42,
+    "output_width": 1200,
+    "output_height": 800,
+    "n_circles": 700,
+    "noise_scale": 0.004,      # spatial frequency of the radius-modulation field
+    "noise_influence": 0.5,    # 0 = pure log-normal, 1 = field doubles/halves radii
+    "radius_median": 14.0,     # median radius in px at full resolution
+    "radius_spread": 0.65,     # log-sigma: 0.2 = uniform, 1.2 = extreme variation
+    "margin": 0.0,             # fraction of each edge to exclude (0-0.45)
+    "gravity": 0.0,            # pull toward centre: 0 = uniform, 1 = fully centred
+    "gravity_falloff": 0.0,    # 0 = uniform effect, 1 = only nearby marks affected
+    "filled": True,            # True = solid disc, False = ring outline
+    "stroke_width": 1.5,       # ring thickness when filled=False
+    "alpha_min": 20,
+    "alpha_max": 110,
+    "bg_dark": False,
+}
+
+
+def generate(config: dict, scale: float = 1.0) -> Image.Image:
+    """
+    Render scattered circles and return a PIL Image.
+
+    scale < 1.0 produces a proportionally smaller image (useful for previews)
+    while preserving the spatial character of the noise field.
+    """
+    cfg = {**DEFAULTS, **config}
+
+    seed            = int(cfg["seed"])
+    width           = max(10, int(cfg["output_width"]  * scale))
+    height          = max(10, int(cfg["output_height"] * scale))
+    n_circles       = int(cfg["n_circles"])
+    ns              = float(cfg["noise_scale"]) / max(scale, 0.05)
+    noise_inf       = float(cfg["noise_influence"])
+    r_median        = float(cfg["radius_median"]) * scale
+    r_spread        = float(cfg["radius_spread"])
+    margin          = float(cfg["margin"])
+    gravity         = float(cfg["gravity"])
+    gravity_falloff = float(cfg["gravity_falloff"])
+    filled          = bool(cfg["filled"])
+    stroke_w        = max(1, round(float(cfg["stroke_width"])))
+    a_min           = int(cfg["alpha_min"])
+    a_max           = max(a_min + 1, int(cfg["alpha_max"]))
+    bg_dark         = bool(cfg["bg_dark"])
+
+    bg = (18,  18,  18)  if bg_dark else (245, 245, 240)
+    fg = (220, 220, 215) if bg_dark else (20,  20,  25)
+
+    rng = np.random.default_rng(seed)
+
+    # Positions constrained by margin, then optionally pulled toward centre
+    x_min, x_max = width  * margin, width  * (1.0 - margin)
+    y_min, y_max = height * margin, height * (1.0 - margin)
+    xs = rng.uniform(x_min, x_max, n_circles)
+    ys = rng.uniform(y_min, y_max, n_circles)
+    if gravity > 0.0:
+        cx, cy = (x_min + x_max) * 0.5, (y_min + y_max) * 0.5
+        dx, dy = cx - xs, cy - ys
+        if gravity_falloff > 0.0:
+            canvas_r = 0.5 * math.sqrt((x_max - x_min) ** 2 + (y_max - y_min) ** 2)
+            d = np.sqrt(dx ** 2 + dy ** 2)
+            weight = np.exp(-gravity_falloff * 5.0 * d / (canvas_r + 1e-9))
+        else:
+            weight = 1.0
+        xs = xs + dx * gravity * weight
+        ys = ys + dy * gravity * weight
+
+    # Base radii: log-normal
+    log_r = rng.normal(math.log(max(r_median, 1.0)), r_spread, n_circles)
+    max_r = max(width, height) * 0.12
+    base_radii = np.clip(np.exp(log_r), 1.0 * scale, max_r)
+
+    # Modulate radii by the noise field at each circle's position.
+    # Noise values approx [-1, 1]; map to a multiplier centred at 1.0.
+    noise_field = _fractal_noise_field(width, height, ns, seed=seed + 99991)
+    xi = np.clip(xs.astype(np.intp), 0, width  - 1)
+    yi = np.clip(ys.astype(np.intp), 0, height - 1)
+    nv = noise_field[yi, xi]
+    modulation = np.clip(1.0 + nv * noise_inf, 0.15, 2.0)
+    radii = np.clip(base_radii * modulation, 1.0 * scale, max_r * 1.5)
+
+    # Alphas
+    alphas = rng.integers(a_min, a_max, n_circles)
+
+    # Draw largest circles first so small ones appear on top
+    order = np.argsort(radii)[::-1]
+
+    # Pre-blend each alpha level against the background.
+    # Pillow's ImageDraw does not composite alpha, so we encode opacity as a
+    # lighter/darker shade rather than using the RGBA channel.
+    color_lut: dict[int, tuple[int, int, int]] = {}
+    for a in range(a_min, a_max):
+        t = a / 255.0
+        color_lut[a] = tuple(int(bg[j] + (fg[j] - bg[j]) * t) for j in range(3))  # type: ignore[misc]
+
+    img  = Image.new("RGB", (width, height), bg)
+    draw = ImageDraw.Draw(img)
+
+    for i in order:
+        x, y, r = float(xs[i]), float(ys[i]), float(radii[i])
+        color = color_lut.get(int(alphas[i]), fg)
+        bbox = [x - r, y - r, x + r, y + r]
+        if filled:
+            draw.ellipse(bbox, fill=color)
+        else:
+            draw.ellipse(bbox, outline=color, width=stroke_w)
+
+    return img
