@@ -235,9 +235,10 @@ with st.spinner("Rendering..."):
 
 preview_img = Image.open(io.BytesIO(preview_bytes))
 img_placeholder.image(preview_img, use_container_width=True)
+gravity_note = f" · gravity {gravity:.2f}" if gravity > 0 else ""
 caption_placeholder.caption(
     f"Preview {preview_img.width}x{preview_img.height} px "
-    f"- output {out_w}x{out_h} px"
+    f"- output {out_w}x{out_h} px{gravity_note}"
 )
 
 # ── Export ─────────────────────────────────────────────────────────────────────

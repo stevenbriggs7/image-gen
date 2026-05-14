@@ -82,8 +82,10 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
             weight = np.exp(-gravity_falloff * 5.0 * d / (canvas_r + 1e-9))
         else:
             weight = 1.0
-        xs = xs + dx * gravity * weight
-        ys = ys + dy * gravity * weight
+        # Square-root curve: even a small slider value produces a visible pull
+        effective = math.sqrt(gravity)
+        xs = xs + dx * effective * weight
+        ys = ys + dy * effective * weight
 
     # Base radii: log-normal
     log_r = rng.normal(math.log(max(r_median, 1.0)), r_spread, n_circles)

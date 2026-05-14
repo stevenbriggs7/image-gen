@@ -132,8 +132,10 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
             weight = np.exp(-gravity_falloff * 5.0 * d / (canvas_r + 1e-9))
         else:
             weight = 1.0
-        xs = xs + dx * gravity * weight
-        ys = ys + dy * gravity * weight
+        # Square-root curve: even a small slider value produces a visible pull
+        effective = math.sqrt(gravity)
+        xs = xs + dx * effective * weight
+        ys = ys + dy * effective * weight
 
     # Log-normal length distribution: median controls centre, spread controls the tail.
     log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)
