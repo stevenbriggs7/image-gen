@@ -7,6 +7,8 @@ Mathematical principles:
   - Line lengths follow a Gaussian distribution (natural spread around a mean).
   - Starting positions are uniform-random; the flow field gives them direction.
   - Alpha is sampled uniformly and composited onto the background analytically.
+  - Flow curves: strokes re-sample the field at each step, bending organically
+    rather than pointing once in a fixed direction.
 """
 
 import math
@@ -22,6 +24,7 @@ DEFAULTS: dict = {
     "angle_range": 1.0,      # fraction of 2π covered by the field
     "length_median": 60.0,   # median line length in px (log-normal)
     "length_spread": 0.6,    # log-sigma: 0.1 = uniform, 1.5 = extreme variation
+    "flow_steps": 1,         # 1 = straight line; >1 = curved stroke following the field
     "margin": 0.0,           # fraction of each edge to exclude (0-0.45)
     "gravity": 0.0,          # pull toward centre: 0 = uniform, 1 = fully centred
     "gravity_falloff": 0.0,  # 0 = uniform effect, 1 = only nearby marks affected
@@ -29,9 +32,15 @@ DEFAULTS: dict = {
     "stroke_width_max": 2.5,
     "alpha_min": 50,         # 0-255
     "alpha_max": 180,
-    "bg_dark": False,
+    "bg_hex": "#f5f5f0",
+    "fg_hex": "#141419",
     "invert_overlap": False,
 }
+
+
+def _hex_to_rgb(h: str) -> tuple[int, int, int]:
+    h = h.lstrip("#")
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
 # ── Noise field ──────────────────────────────────────────────────────────────────────────────
@@ -43,7 +52,6 @@ def _smooth_layer(width: int, height: int, grid_scale: float, seed: int) -> np.n
     rng = np.random.default_rng(seed)
     grid = rng.uniform(-1.0, 1.0, (gh, gw))
 
-    # Fractional positions in grid space for every pixel
     gy = np.linspace(0.0, gh - 1.0, height)
     gx = np.linspace(0.0, gw - 1.0, width)
 
@@ -56,14 +64,13 @@ def _smooth_layer(width: int, height: int, grid_scale: float, seed: int) -> np.n
     uy = fy * fy * (3.0 - 2.0 * fy)
     ux = fx * fx * (3.0 - 2.0 * fx)
 
-    # Bilinear interpolation over the full 2-D field via outer-product indexing
     v00 = grid[np.ix_(iy,     ix    )]
     v10 = grid[np.ix_(iy,     ix + 1)]
     v01 = grid[np.ix_(iy + 1, ix    )]
     v11 = grid[np.ix_(iy + 1, ix + 1)]
 
-    ux2d = ux[np.newaxis, :]   # (1, W)
-    uy2d = uy[:, np.newaxis]   # (H, 1)
+    ux2d = ux[np.newaxis, :]
+    uy2d = uy[:, np.newaxis]
 
     return (v00 * (1 - ux2d) * (1 - uy2d)
             + v10 * ux2d      * (1 - uy2d)
@@ -86,6 +93,30 @@ def _fractal_noise_field(
     return field / total
 
 
+def _invert_segment(canvas_arr, x0, y0, x1, y1, w, t, width, height):
+    """Apply alpha-weighted inversion along one line segment (bounding-box fast path)."""
+    pad = int(w) + 2
+    xl = max(0, int(min(x0, x1)) - pad)
+    xh = min(width,  int(max(x0, x1)) + pad + 1)
+    yl = max(0, int(min(y0, y1)) - pad)
+    yh = min(height, int(max(y0, y1)) + pad + 1)
+    if xl >= xh or yl >= yh:
+        return
+    sy, sx = np.mgrid[yl:yh, xl:xh]
+    fsx = sx.astype(np.float32)
+    fsy = sy.astype(np.float32)
+    dx, dy = x1 - x0, y1 - y0
+    lsq = dx * dx + dy * dy
+    if lsq < 1.0:
+        dist = np.sqrt((fsx - x0) ** 2 + (fsy - y0) ** 2)
+    else:
+        tp = np.clip(((fsx - x0) * dx + (fsy - y0) * dy) / lsq, 0.0, 1.0)
+        dist = np.sqrt((fsx - x0 - tp * dx) ** 2 + (fsy - y0 - tp * dy) ** 2)
+    sub_mask = dist <= w * 0.5
+    sub = canvas_arr[yl:yh, xl:xh]
+    sub[sub_mask] = np.clip(sub[sub_mask] * (1.0 - 2.0 * t) + 255.0 * t, 0.0, 255.0)
+
+
 # ── Main generation entry point ───────────────────────────────────────────────────────────
 
 def generate(config: dict, scale: float = 1.0) -> Image.Image:
@@ -105,22 +136,21 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     a_range       = float(cfg["angle_range"]) * 2.0 * math.pi
     l_median      = float(cfg["length_median"]) * scale
     l_spread      = float(cfg["length_spread"])
+    flow_steps    = max(1, int(cfg["flow_steps"]))
     margin          = float(cfg["margin"])
     gravity         = float(cfg["gravity"])
     gravity_falloff = float(cfg["gravity_falloff"])
     sw_min          = float(cfg["stroke_width_min"])
-    sw_max        = float(cfg["stroke_width_max"])
-    a_min         = int(cfg["alpha_min"])
-    a_max         = max(a_min + 1, int(cfg["alpha_max"]))
-    bg_dark       = bool(cfg["bg_dark"])
+    sw_max          = float(cfg["stroke_width_max"])
+    a_min           = int(cfg["alpha_min"])
+    a_max           = max(a_min + 1, int(cfg["alpha_max"]))
     invert_overlap  = bool(cfg["invert_overlap"])
 
-    bg = (18,  18,  18)  if bg_dark else (245, 245, 240)
-    fg = (220, 220, 215) if bg_dark else (20,  20,  25)
+    bg = _hex_to_rgb(str(cfg["bg_hex"]))
+    fg = _hex_to_rgb(str(cfg["fg_hex"]))
 
     rng = np.random.default_rng(seed)
 
-    # Starting positions constrained to the inner rectangle defined by margin
     x_min, x_max = width  * margin, width  * (1.0 - margin)
     y_min, y_max = height * margin, height * (1.0 - margin)
     xs = rng.uniform(x_min, x_max, n_lines)
@@ -134,88 +164,104 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
             weight = np.exp(-gravity_falloff * 5.0 * d / (canvas_r + 1e-9))
         else:
             weight = 1.0
-        # Square-root curve: even a small slider value produces a visible pull
         effective = math.sqrt(gravity)
         xs = xs + dx * effective * weight
         ys = ys + dy * effective * weight
 
-    # Log-normal length distribution: median controls centre, spread controls the tail.
     log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)
     lengths = np.clip(np.exp(log_lengths), 3.0 * scale, max(width, height) * 1.5)
 
-    # Stroke widths and alphas
     widths = rng.uniform(sw_min, sw_max, n_lines)
     alphas = rng.integers(a_min, a_max, n_lines)
 
-    # Build the angle field (H, W)
     noise_field = _fractal_noise_field(width, height, ns, seed=seed + 99991)
 
-    # Sample angle at each line's start position
     xi = np.clip(xs.astype(np.intp), 0, width  - 1)
     yi = np.clip(ys.astype(np.intp), 0, height - 1)
     nv = noise_field[yi, xi]
     angles = (nv + 1.0) * 0.5 * a_range
 
-    # Vectorised line endpoint computation
-    halves = lengths * 0.5
-    cos_a  = np.cos(angles)
-    sin_a  = np.sin(angles)
-    x0s = xs - cos_a * halves
-    y0s = ys - sin_a * halves
-    x1s = xs + cos_a * halves
-    y1s = ys + sin_a * halves
-
     img = Image.new("RGB", (width, height), bg)
 
-    if invert_overlap:
-        # XOR-style inversion: each line flips the tone of pixels beneath it.
-        # Lines crossing each other cancel out, creating lattice/moiré effects.
-        # Uses bounding-box optimisation so only pixels near each line are touched.
-        canvas_arr = np.array(img, dtype=np.float32)
-        for i in range(n_lines):
-            x0, y0 = float(x0s[i]), float(y0s[i])
-            x1, y1 = float(x1s[i]), float(y1s[i])
-            w  = max(1.0, float(widths[i]))
-            t  = float(alphas[i]) / 255.0
+    if flow_steps == 1:
+        # Straight line: classic vectorised endpoint computation
+        halves = lengths * 0.5
+        x0s = xs - np.cos(angles) * halves
+        y0s = ys - np.sin(angles) * halves
+        x1s = xs + np.cos(angles) * halves
+        y1s = ys + np.sin(angles) * halves
 
-            pad = int(w) + 2
-            xl = max(0, int(min(x0, x1)) - pad)
-            xh = min(width,  int(max(x0, x1)) + pad + 1)
-            yl = max(0, int(min(y0, y1)) - pad)
-            yh = min(height, int(max(y0, y1)) + pad + 1)
-            if xl >= xh or yl >= yh:
-                continue
-
-            sy, sx = np.mgrid[yl:yh, xl:xh]
-            fsx = sx.astype(np.float32)
-            fsy = sy.astype(np.float32)
-            dx, dy = x1 - x0, y1 - y0
-            lsq = dx * dx + dy * dy
-            if lsq < 1.0:
-                dist = np.sqrt((fsx - x0) ** 2 + (fsy - y0) ** 2)
-            else:
-                tp = np.clip(((fsx - x0) * dx + (fsy - y0) * dy) / lsq, 0.0, 1.0)
-                dist = np.sqrt((fsx - x0 - tp * dx) ** 2 + (fsy - y0 - tp * dy) ** 2)
-
-            sub_mask = dist <= w * 0.5
-            sub = canvas_arr[yl:yh, xl:xh]
-            # t=1 → full inversion (255-p), t=0 → no change; overlapping lines cancel
-            sub[sub_mask] = np.clip(sub[sub_mask] * (1.0 - 2.0 * t) + 255.0 * t, 0.0, 255.0)
-
-        img = Image.fromarray(canvas_arr.astype(np.uint8), "RGB")
+        if invert_overlap:
+            canvas_arr = np.array(img, dtype=np.float32)
+            for i in range(n_lines):
+                _invert_segment(
+                    canvas_arr,
+                    float(x0s[i]), float(y0s[i]), float(x1s[i]), float(y1s[i]),
+                    max(1.0, float(widths[i])), float(alphas[i]) / 255.0,
+                    width, height,
+                )
+            img = Image.fromarray(canvas_arr.astype(np.uint8), "RGB")
+        else:
+            color_lut: dict[int, tuple[int, int, int]] = {}
+            for a in range(a_min, a_max):
+                t = a / 255.0
+                color_lut[a] = tuple(int(bg[c] + (fg[c] - bg[c]) * t) for c in range(3))  # type: ignore[misc]
+            draw = ImageDraw.Draw(img)
+            for i in range(n_lines):
+                draw.line(
+                    [(float(x0s[i]), float(y0s[i])), (float(x1s[i]), float(y1s[i]))],
+                    fill=color_lut.get(int(alphas[i]), fg),
+                    width=max(1, round(float(widths[i]))),
+                )
     else:
-        # Precompute blended colours for every alpha level in [a_min, a_max)
-        color_lut: dict[int, tuple[int, int, int]] = {}
-        for a in range(a_min, a_max):
-            t = a / 255.0
-            color_lut[a] = tuple(int(bg[i] + (fg[i] - bg[i]) * t) for i in range(3))  # type: ignore[misc]
+        # Flow curve: trace each stroke through the field step by step.
+        # All strokes are advanced in parallel (vectorised per step) then drawn.
+        step_sizes = lengths / flow_steps
+        x_curr = xs.copy()
+        y_curr = ys.copy()
+        cur_angles = angles.copy()
 
-        draw = ImageDraw.Draw(img)
-        for i in range(n_lines):
-            draw.line(
-                [(float(x0s[i]), float(y0s[i])), (float(x1s[i]), float(y1s[i]))],
-                fill=color_lut.get(int(alphas[i]), fg),
-                width=max(1, round(float(widths[i]))),
-            )
+        # all_pts shape: (n_lines, flow_steps+1, 2)
+        all_pts = np.empty((n_lines, flow_steps + 1, 2), dtype=np.float32)
+        all_pts[:, 0, 0] = x_curr
+        all_pts[:, 0, 1] = y_curr
+
+        for s in range(flow_steps):
+            x_curr = x_curr + np.cos(cur_angles) * step_sizes
+            y_curr = y_curr + np.sin(cur_angles) * step_sizes
+            all_pts[:, s + 1, 0] = x_curr
+            all_pts[:, s + 1, 1] = y_curr
+            if s < flow_steps - 1:
+                xi_s = np.clip(x_curr.astype(np.intp), 0, width  - 1)
+                yi_s = np.clip(y_curr.astype(np.intp), 0, height - 1)
+                cur_angles = (noise_field[yi_s, xi_s] + 1.0) * 0.5 * a_range
+
+        if invert_overlap:
+            canvas_arr = np.array(img, dtype=np.float32)
+            for i in range(n_lines):
+                t = float(alphas[i]) / 255.0
+                w = max(1.0, float(widths[i]))
+                for s in range(flow_steps):
+                    _invert_segment(
+                        canvas_arr,
+                        float(all_pts[i, s,   0]), float(all_pts[i, s,   1]),
+                        float(all_pts[i, s+1, 0]), float(all_pts[i, s+1, 1]),
+                        w, t, width, height,
+                    )
+            img = Image.fromarray(canvas_arr.astype(np.uint8), "RGB")
+        else:
+            color_lut = {}
+            for a in range(a_min, a_max):
+                t = a / 255.0
+                color_lut[a] = tuple(int(bg[c] + (fg[c] - bg[c]) * t) for c in range(3))  # type: ignore[misc]
+            draw = ImageDraw.Draw(img)
+            for i in range(n_lines):
+                pts = [(float(all_pts[i, s, 0]), float(all_pts[i, s, 1]))
+                       for s in range(flow_steps + 1)]
+                draw.line(
+                    pts,
+                    fill=color_lut.get(int(alphas[i]), fg),
+                    width=max(1, round(float(widths[i]))),
+                )
 
     return img

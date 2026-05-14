@@ -15,7 +15,7 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw
 
-from generate import _fractal_noise_field
+from generate import _fractal_noise_field, _hex_to_rgb
 
 DEFAULTS: dict = {
     "seed": 42,
@@ -33,7 +33,8 @@ DEFAULTS: dict = {
     "stroke_width": 1.5,       # ring thickness when filled=False
     "alpha_min": 20,
     "alpha_max": 110,
-    "bg_dark": False,
+    "bg_hex": "#f5f5f0",
+    "fg_hex": "#141419",
     "invert_overlap": False,
 }
 
@@ -62,11 +63,10 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     stroke_w        = max(1, round(float(cfg["stroke_width"])))
     a_min           = int(cfg["alpha_min"])
     a_max           = max(a_min + 1, int(cfg["alpha_max"]))
-    bg_dark         = bool(cfg["bg_dark"])
     invert_overlap  = bool(cfg["invert_overlap"])
 
-    bg = (18,  18,  18)  if bg_dark else (245, 245, 240)
-    fg = (220, 220, 215) if bg_dark else (20,  20,  25)
+    bg = _hex_to_rgb(str(cfg["bg_hex"]))
+    fg = _hex_to_rgb(str(cfg["fg_hex"]))
 
     rng = np.random.default_rng(seed)
 
