@@ -1,5 +1,5 @@
 """
-Streamlit UI for the scattered-lines generator.
+Streamlit UI -- generative image tools.
 
 Run:
     streamlit run app.py
@@ -10,16 +10,15 @@ import random
 import streamlit as st
 from PIL import Image
 
-from generate import generate, DEFAULTS
+import generate as gen_lines
+import generate_circles as gen_circles
 
 st.set_page_config(
-    page_title="Scattered Lines",
-    page_icon="╯",
+    page_title="Generative Art",
+    page_icon="o",
     layout="wide",
 )
 
-# Remove Streamlit's header bar and default top padding.
-# Cap image height so it shares the viewport with the controls panel below.
 st.markdown("""
 <style>
 header[data-testid="stHeader"] { display: none; }
@@ -28,118 +27,166 @@ header[data-testid="stHeader"] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Image placeholder ──────────────────────────────────────────────────────────────────────────────
-# Filled after all params are collected further down.
-
+# Image placeholder at top
 img_placeholder     = st.empty()
 caption_placeholder = st.empty()
 
-# ── Controls — fixed-height scrollable panel ───────────────────────────────────────────────
-
+# Controls panel
 with st.container(height=480, border=False):
 
-    st.subheader("Randomness")
-    col_seed, col_btn = st.columns([5, 1])
-    with col_seed:
-        seed = st.number_input("Seed", min_value=0, max_value=99999,
-                               value=DEFAULTS["seed"], step=1)
-    with col_btn:
-        st.write("")
-        if st.button("⟳", help="Randomize seed", use_container_width=True):
-            seed = random.randint(0, 99999)
-            st.rerun()
-
-    st.subheader("Lines")
-    n_lines       = st.slider("Count", 50, 5000, DEFAULTS["n_lines"], step=50)
-    length_median = st.slider("Length median (px)", 5, 400, int(DEFAULTS["length_median"]))
-    length_spread = st.slider(
-        "Length variation", 0.1, 2.0, DEFAULTS["length_spread"], step=0.05, format="%.2f",
-        help="Log-normal spread. 0.1 = uniform, 0.6 = moderate, 1.5 = extreme.",
-    )
-    margin = st.slider(
-        "Edge margin", 0.0, 0.45, DEFAULTS["margin"], step=0.01, format="%.2f",
-        help="Fraction of the image to leave empty at each edge.",
-    )
-
-    st.subheader("Flow Field")
-    noise_scale = st.slider(
-        "Noise scale", 0.0005, 0.025, DEFAULTS["noise_scale"],
-        step=0.0005, format="%.4f",
-        help="Low = sweeping coherent directions. High = chaotic.",
-    )
-    angle_range = st.slider(
-        "Angle range (x 2pi)", 0.05, 1.0, DEFAULTS["angle_range"],
-        step=0.05, format="%.2f",
-        help="1.0 = any direction; 0.25 = constrained to a quadrant.",
-    )
-
-    st.subheader("Stroke")
-    sw_min, sw_max = st.slider(
-        "Width range (px)", 0.5, 8.0,
-        (DEFAULTS["stroke_width_min"], DEFAULTS["stroke_width_max"]),
-        step=0.5,
-    )
-    alpha_min, alpha_max = st.slider(
-        "Opacity range (0-255)", 0, 255,
-        (DEFAULTS["alpha_min"], DEFAULTS["alpha_max"]),
-    )
-
-    st.subheader("Color")
-    bg_dark = st.toggle("Dark background", value=DEFAULTS["bg_dark"])
-
-    st.subheader("Output size")
-    out_w = st.select_slider(
-        "Width (px)", [400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
-        value=DEFAULTS["output_width"],
-    )
-    out_h = st.select_slider(
-        "Height (px)", [300, 400, 600, 800, 1000, 1200, 1600, 2000, 3000],
-        value=DEFAULTS["output_height"],
+    # Type picker
+    gen_type = st.radio(
+        "Type", ["Lines", "Circles"],
+        horizontal=True,
+        label_visibility="collapsed",
     )
 
     st.divider()
 
+    # Shared: seed
+    defaults = gen_lines.DEFAULTS if gen_type == "Lines" else gen_circles.DEFAULTS
+    col_seed, col_btn = st.columns([5, 1])
+    with col_seed:
+        seed = st.number_input("Seed", min_value=0, max_value=99999,
+                               value=defaults["seed"], step=1)
+    with col_btn:
+        st.write("")
+        if st.button("Randomize", help="Randomize seed", use_container_width=True):
+            seed = random.randint(0, 99999)
+            st.rerun()
+
+    # Lines controls
+    if gen_type == "Lines":
+        D = gen_lines.DEFAULTS
+
+        st.subheader("Lines")
+        n_lines       = st.slider("Count", 50, 5000, D["n_lines"], step=50)
+        length_median = st.slider("Length median (px)", 5, 400, int(D["length_median"]))
+        length_spread = st.slider(
+            "Length variation", 0.1, 2.0, D["length_spread"], step=0.05, format="%.2f",
+            help="Log-normal spread. 0.1 = uniform, 1.5 = extreme.",
+        )
+        margin = st.slider(
+            "Edge margin", 0.0, 0.45, D["margin"], step=0.01, format="%.2f",
+            help="Fraction of the image to leave empty at each edge.",
+        )
+
+        st.subheader("Flow Field")
+        noise_scale = st.slider(
+            "Noise scale", 0.0005, 0.025, D["noise_scale"],
+            step=0.0005, format="%.4f",
+            help="Low = sweeping coherent directions. High = chaotic.",
+        )
+        angle_range = st.slider(
+            "Angle range (x 2pi)", 0.05, 1.0, D["angle_range"],
+            step=0.05, format="%.2f",
+            help="1.0 = any direction; 0.25 = constrained to a quadrant.",
+        )
+
+        st.subheader("Stroke")
+        sw_min, sw_max = st.slider(
+            "Width range (px)", 0.5, 8.0,
+            (D["stroke_width_min"], D["stroke_width_max"]),
+            step=0.5,
+        )
+        alpha_min, alpha_max = st.slider(
+            "Opacity range (0-255)", 0, 255, (D["alpha_min"], D["alpha_max"]),
+        )
+
+    # Circles controls
+    else:
+        D = gen_circles.DEFAULTS
+
+        st.subheader("Circles")
+        n_circles      = st.slider("Count", 50, 3000, D["n_circles"], step=50)
+        radius_median  = st.slider("Radius median (px)", 2, 200, int(D["radius_median"]))
+        radius_spread  = st.slider(
+            "Radius variation", 0.1, 2.0, D["radius_spread"], step=0.05, format="%.2f",
+            help="Log-normal spread. 0.2 = uniform sizes, 1.2 = extreme range.",
+        )
+        margin = st.slider(
+            "Edge margin", 0.0, 0.45, D["margin"], step=0.01, format="%.2f",
+            help="Fraction of the image to leave empty at each edge.",
+        )
+
+        st.subheader("Noise Field")
+        noise_scale = st.slider(
+            "Noise scale", 0.0005, 0.025, D["noise_scale"],
+            step=0.0005, format="%.4f",
+            help="Controls the spatial scale of size clustering.",
+        )
+        noise_influence = st.slider(
+            "Noise influence", 0.0, 1.5, D["noise_influence"],
+            step=0.05, format="%.2f",
+            help="How strongly the field modulates radius. 0 = pure random, 1 = strong clustering.",
+        )
+
+        st.subheader("Style")
+        filled = st.toggle("Filled discs", value=D["filled"],
+                           help="Off = ring outlines instead of solid discs.")
+        if not filled:
+            stroke_w = st.slider("Ring thickness (px)", 0.5, 6.0, D["stroke_width"], step=0.5)
+        else:
+            stroke_w = D["stroke_width"]
+
+        alpha_min, alpha_max = st.slider(
+            "Opacity range (0-255)", 0, 255, (D["alpha_min"], D["alpha_max"]),
+        )
+
+    # Shared: color + output
+    st.subheader("Color & Output")
+    bg_dark = st.toggle("Dark background", value=defaults["bg_dark"])
+    out_w = st.select_slider(
+        "Width (px)", [400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
+        value=defaults["output_width"],
+    )
+    out_h = st.select_slider(
+        "Height (px)", [300, 400, 600, 800, 1000, 1200, 1600, 2000, 3000],
+        value=defaults["output_height"],
+    )
+
+    st.divider()
     col_btn2, col_tip = st.columns([1, 3])
     with col_btn2:
         render_full = st.button("Render full resolution", type="primary")
     with col_tip:
         st.caption("Preview updates automatically. Render for full-res export.")
 
-# ── Assemble config ────────────────────────────────────────────────────────────────────────────
 
-config = {
-    "seed": int(seed),
-    "output_width": out_w,
-    "output_height": out_h,
-    "n_lines": n_lines,
-    "noise_scale": noise_scale,
-    "angle_range": angle_range,
-    "length_median": float(length_median),
-    "length_spread": float(length_spread),
-    "margin": float(margin),
-    "stroke_width_min": sw_min,
-    "stroke_width_max": sw_max,
-    "alpha_min": alpha_min,
-    "alpha_max": alpha_max,
-    "bg_dark": bg_dark,
-}
+# Assemble config
+if gen_type == "Lines":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "n_lines": n_lines,
+        "noise_scale": noise_scale, "angle_range": angle_range,
+        "length_median": float(length_median), "length_spread": float(length_spread),
+        "margin": float(margin),
+        "stroke_width_min": sw_min, "stroke_width_max": sw_max,
+        "alpha_min": alpha_min, "alpha_max": alpha_max,
+        "bg_dark": bg_dark,
+    }
+    label = "lines"
+else:
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "n_circles": n_circles,
+        "noise_scale": noise_scale, "noise_influence": float(noise_influence),
+        "radius_median": float(radius_median), "radius_spread": float(radius_spread),
+        "margin": float(margin),
+        "filled": filled, "stroke_width": stroke_w,
+        "alpha_min": alpha_min, "alpha_max": alpha_max,
+        "bg_dark": bg_dark,
+    }
+    label = "circles"
 
 
-# ── Cached generation ──────────────────────────────────────────────────────────────────────────
-
-@st.cache_data(max_entries=30, show_spinner=False)
-def _generate_preview(cfg_key: tuple, scale: float) -> bytes:
+@st.cache_data(max_entries=40, show_spinner=False)
+def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
     cfg = dict(zip(cfg_key[::2], cfg_key[1::2]))
-    img = generate(cfg, scale=scale)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=False)
-    return buf.getvalue()
-
-
-@st.cache_data(max_entries=5, show_spinner=False)
-def _generate_full(cfg_key: tuple) -> bytes:
-    cfg = dict(zip(cfg_key[::2], cfg_key[1::2]))
-    img = generate(cfg, scale=1.0)
+    fn = gen_lines.generate if gen_type == "Lines" else gen_circles.generate
+    img = fn(cfg, scale=scale)
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=False)
     return buf.getvalue()
@@ -149,30 +196,28 @@ def _cfg_key(cfg: dict) -> tuple:
     return tuple(x for pair in sorted(cfg.items()) for x in pair)
 
 
-# ── Render preview into the top placeholder ──────────────────────────────────────────────
-
+# Render preview
 PREVIEW_MAX_W = 900
 preview_scale = min(PREVIEW_MAX_W / out_w, 1.0)
 key = _cfg_key(config)
 
 with st.spinner("Rendering..."):
-    preview_bytes = _generate_preview(key, scale=preview_scale)
+    preview_bytes = _render(gen_type, key, preview_scale)
 
 preview_img = Image.open(io.BytesIO(preview_bytes))
 img_placeholder.image(preview_img, use_container_width=True)
 caption_placeholder.caption(
     f"Preview {preview_img.width}x{preview_img.height} px "
-    f"- output {out_w}x{out_h} px - {n_lines:,} lines"
+    f"- output {out_w}x{out_h} px"
 )
 
-# ── Export ──────────────────────────────────────────────────────────────────────────────────
-
+# Export
 if render_full:
     with st.spinner(f"Rendering {out_w}x{out_h} px..."):
-        full_bytes = _generate_full(key)
+        full_bytes = _render(gen_type, key, 1.0)
     st.download_button(
         "Download PNG",
         data=full_bytes,
-        file_name="scattered_lines.png",
+        file_name=f"scattered_{label}.png",
         mime="image/png",
     )
