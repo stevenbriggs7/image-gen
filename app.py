@@ -5,6 +5,7 @@ Run:
     streamlit run app.py
 """
 
+import colorsys
 import io
 import random
 import streamlit as st
@@ -12,6 +13,115 @@ from PIL import Image
 
 import generate as gen_lines
 import generate_circles as gen_circles
+
+
+# ── Mood colour system ─────────────────────────────────────────────────────────
+# Each mood defines HLS ranges for background and mark colour.
+# Foreground hue is derived from background via one of three strategies:
+#   "analogous"  – same hue ± small offset (harmonious, related tones)
+#   "complement" – opposite hue ± offset (vibrant contrast)
+#   "fixed"      – independent hue range (for moods where bg hue is arbitrary)
+
+_MOODS: dict = {
+    "ink": {
+        "bg": {"h": (30, 220), "s": (0.00, 0.06), "l": (0.93, 0.99)},
+        "fg": {"strategy": "analogous", "offset": (-15, 15), "s": (0.00, 0.10), "l": (0.02, 0.10)},
+    },
+    "parchment": {
+        "bg": {"h": (35, 55), "s": (0.28, 0.55), "l": (0.84, 0.94)},
+        "fg": {"strategy": "analogous", "offset": (-20, 10), "s": (0.38, 0.68), "l": (0.12, 0.26)},
+    },
+    "fog": {
+        "bg": {"h": (170, 230), "s": (0.04, 0.14), "l": (0.78, 0.90)},
+        "fg": {"strategy": "analogous", "offset": (-15, 15), "s": (0.06, 0.20), "l": (0.18, 0.36)},
+    },
+    "sand": {
+        "bg": {"h": (22, 45), "s": (0.38, 0.65), "l": (0.72, 0.88)},
+        "fg": {"strategy": "analogous", "offset": (-18, 12), "s": (0.48, 0.72), "l": (0.16, 0.30)},
+    },
+    "dawn": {
+        "bg": {"h": (10, 52), "s": (0.48, 0.78), "l": (0.82, 0.94)},
+        "fg": {"strategy": "analogous", "offset": (-25, 25), "s": (0.52, 0.80), "l": (0.13, 0.28)},
+    },
+    "ember": {
+        "bg": {"h": (12, 30), "s": (0.22, 0.48), "l": (0.07, 0.15)},
+        "fg": {"strategy": "analogous", "offset": (-12, 20), "s": (0.78, 1.00), "l": (0.52, 0.72)},
+    },
+    "dusk": {
+        "bg": {"h": (255, 288), "s": (0.38, 0.68), "l": (0.09, 0.19)},
+        "fg": {"strategy": "fixed", "h": (12, 50), "s": (0.68, 0.92), "l": (0.58, 0.78)},
+    },
+    "midnight": {
+        "bg": {"h": (215, 265), "s": (0.42, 0.72), "l": (0.05, 0.14)},
+        "fg": {"strategy": "complement", "offset": (162, 198), "s": (0.55, 0.82), "l": (0.60, 0.82)},
+    },
+    "storm": {
+        "bg": {"h": (195, 228), "s": (0.16, 0.36), "l": (0.11, 0.22)},
+        "fg": {"strategy": "analogous", "offset": (-22, 22), "s": (0.08, 0.28), "l": (0.80, 0.94)},
+    },
+    "arctic": {
+        "bg": {"h": (175, 215), "s": (0.18, 0.42), "l": (0.87, 0.96)},
+        "fg": {"strategy": "analogous", "offset": (-15, 15), "s": (0.48, 0.78), "l": (0.15, 0.32)},
+    },
+    "forest": {
+        "bg": {"h": (112, 148), "s": (0.42, 0.68), "l": (0.09, 0.20)},
+        "fg": {"strategy": "fixed", "h": (35, 68), "s": (0.68, 0.92), "l": (0.58, 0.80)},
+    },
+    "neon": {
+        "bg": {"h": (0, 360), "s": (0.00, 0.18), "l": (0.04, 0.09)},
+        "fg": {"strategy": "fixed", "h": (0, 360), "s": (0.88, 1.00), "l": (0.48, 0.64)},
+    },
+}
+
+_MOOD_LABELS = {
+    "ink":       "Ink",
+    "parchment": "Parchment",
+    "fog":       "Fog",
+    "sand":      "Sand",
+    "dawn":      "Dawn",
+    "ember":     "Ember",
+    "dusk":      "Dusk",
+    "midnight":  "Midnight",
+    "storm":     "Storm",
+    "arctic":    "Arctic",
+    "forest":    "Forest",
+    "neon":      "Neon",
+}
+
+
+def _hls_hex(h_deg: float, l: float, s: float) -> str:
+    r, g, b = colorsys.hls_to_rgb(h_deg / 360.0 % 1.0, max(0.0, min(1.0, l)), max(0.0, min(1.0, s)))
+    return "#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255))
+
+
+def mood_colors(mood: str, seed: int) -> tuple[str, str]:
+    """Return (bg_hex, fg_hex) drawn from the mood's colour ranges using seed."""
+    spec = _MOODS.get(mood, _MOODS["ink"])
+    rng = random.Random(seed)
+
+    def u(lo: float, hi: float) -> float:
+        return lo + rng.random() * (hi - lo)
+
+    bg   = spec["bg"]
+    bg_h = u(*bg["h"]) % 360.0
+    bg_s = u(*bg["s"])
+    bg_l = u(*bg["l"])
+
+    fg       = spec["fg"]
+    strategy = fg["strategy"]
+    if strategy == "complement":
+        fg_h = (bg_h + u(*fg["offset"])) % 360.0
+    elif strategy == "analogous":
+        fg_h = (bg_h + u(*fg["offset"])) % 360.0
+    else:  # "fixed" — independent hue range
+        fg_h = u(*fg["h"]) % 360.0
+    fg_s = u(*fg["s"])
+    fg_l = u(*fg["l"])
+
+    return _hls_hex(bg_h, bg_l, bg_s), _hls_hex(fg_h, fg_l, fg_s)
+
+
+# ── Page config ────────────────────────────────────────────────────────────────
 
 st.set_page_config(
     page_title="Generative Art",
@@ -26,6 +136,12 @@ header[data-testid="stHeader"] { display: none; }
 [data-testid="stImage"] img { max-height: 42vh; width: 100%; object-fit: contain; }
 </style>
 """, unsafe_allow_html=True)
+
+# Colour seed session state — randomised on first load and on mood change
+if "colour_seed" not in st.session_state:
+    st.session_state.colour_seed = 0
+if "prev_mood" not in st.session_state:
+    st.session_state.prev_mood = None
 
 # Image placeholder at top — filled after params are collected
 img_placeholder     = st.empty()
@@ -175,13 +291,31 @@ with st.container(height=500, border=False):
         help="How quickly gravity weakens with distance. 0 = uniform pull everywhere, 1 = only nearby marks affected.",
         key="shared_gravity_falloff",
     )
-    # ── Color & Output (shared) ───────────────────────────────────────────────
-    st.subheader("Color & Output")
-    col_bg, col_fg = st.columns(2)
-    with col_bg:
-        bg_hex = st.color_picker("Background", defaults["bg_hex"], key="shared_bg")
-    with col_fg:
-        fg_hex = st.color_picker("Mark color", defaults["fg_hex"], key="shared_fg")
+
+    # ── Mood / Color & Output (shared) ────────────────────────────────────────
+    st.subheader("Mood & Output")
+    col_mood, col_reroll = st.columns([3, 1])
+    with col_mood:
+        mood = st.selectbox(
+            "Mood",
+            list(_MOOD_LABELS.keys()),
+            format_func=_MOOD_LABELS.get,
+            key="shared_mood",
+        )
+    with col_reroll:
+        st.write("")
+        if st.button("Re-roll", key="shared_reroll", use_container_width=True,
+                     help="Pick new colours within this mood"):
+            st.session_state.colour_seed = random.randint(0, 99999)
+            st.rerun()
+
+    # Randomise colours whenever the mood changes
+    if mood != st.session_state.prev_mood:
+        st.session_state.colour_seed = random.randint(0, 99999)
+        st.session_state.prev_mood = mood
+
+    bg_hex, fg_hex = mood_colors(mood, st.session_state.colour_seed)
+
     out_w = st.select_slider(
         "Width (px)", [400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
         value=defaults["output_width"], key="shared_out_w",
@@ -261,8 +395,9 @@ preview_img = Image.open(io.BytesIO(preview_bytes))
 img_placeholder.image(preview_img, use_container_width=True)
 gravity_note = f" · gravity {gravity:.2f}" if gravity > 0 else ""
 caption_placeholder.caption(
-    f"Preview {preview_img.width}x{preview_img.height} px "
-    f"- output {out_w}x{out_h} px{gravity_note}"
+    f"{_MOOD_LABELS[mood]}  ·  {bg_hex} / {fg_hex}  ·  "
+    f"preview {preview_img.width}×{preview_img.height} px"
+    f"{gravity_note}"
 )
 
 # ── Export ─────────────────────────────────────────────────────────────────────
