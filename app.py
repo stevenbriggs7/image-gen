@@ -14,7 +14,7 @@ from generate import generate, DEFAULTS
 
 st.set_page_config(
     page_title="Scattered Lines",
-    page_icon="╱",
+    page_icon="╯",
     layout="wide",
 )
 
@@ -28,13 +28,13 @@ header[data-testid="stHeader"] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Image placeholder ──────────────────────────────────────────────────────────
+# ── Image placeholder ──────────────────────────────────────────────────────────────────────────────
 # Filled after all params are collected further down.
 
 img_placeholder     = st.empty()
 caption_placeholder = st.empty()
 
-# ── Controls — fixed-height scrollable panel ───────────────────────────────────
+# ── Controls — fixed-height scrollable panel ───────────────────────────────────────────────
 
 with st.container(height=480, border=False):
 
@@ -54,11 +54,11 @@ with st.container(height=480, border=False):
     length_median = st.slider("Length median (px)", 5, 400, int(DEFAULTS["length_median"]))
     length_spread = st.slider(
         "Length variation", 0.1, 2.0, DEFAULTS["length_spread"], step=0.05, format="%.2f",
-        help="Log-normal spread. 0.1 = uniform, 0.6 = moderate, 1.5 = extreme (tiny marks to sweeping arcs).",
+        help="Log-normal spread. 0.1 = uniform, 0.6 = moderate, 1.5 = extreme.",
     )
     margin = st.slider(
         "Edge margin", 0.0, 0.45, DEFAULTS["margin"], step=0.01, format="%.2f",
-        help="Fraction of the image to leave empty at each edge. 0 = full canvas, 0.2 = centred inner area.",
+        help="Fraction of the image to leave empty at each edge.",
     )
 
     st.subheader("Flow Field")
@@ -68,7 +68,7 @@ with st.container(height=480, border=False):
         help="Low = sweeping coherent directions. High = chaotic.",
     )
     angle_range = st.slider(
-        "Angle range (× 2π)", 0.05, 1.0, DEFAULTS["angle_range"],
+        "Angle range (x 2pi)", 0.05, 1.0, DEFAULTS["angle_range"],
         step=0.05, format="%.2f",
         help="1.0 = any direction; 0.25 = constrained to a quadrant.",
     )
@@ -80,7 +80,7 @@ with st.container(height=480, border=False):
         step=0.5,
     )
     alpha_min, alpha_max = st.slider(
-        "Opacity range (0–255)", 0, 255,
+        "Opacity range (0-255)", 0, 255,
         (DEFAULTS["alpha_min"], DEFAULTS["alpha_max"]),
     )
 
@@ -105,7 +105,7 @@ with st.container(height=480, border=False):
     with col_tip:
         st.caption("Preview updates automatically. Render for full-res export.")
 
-# ── Assemble config ────────────────────────────────────────────────────────────
+# ── Assemble config ────────────────────────────────────────────────────────────────────────────
 
 config = {
     "seed": int(seed),
@@ -125,7 +125,7 @@ config = {
 }
 
 
-# ── Cached generation ──────────────────────────────────────────────────────────
+# ── Cached generation ──────────────────────────────────────────────────────────────────────────
 
 @st.cache_data(max_entries=30, show_spinner=False)
 def _generate_preview(cfg_key: tuple, scale: float) -> bytes:
@@ -149,29 +149,29 @@ def _cfg_key(cfg: dict) -> tuple:
     return tuple(x for pair in sorted(cfg.items()) for x in pair)
 
 
-# ── Render preview into the top placeholder ────────────────────────────────────
+# ── Render preview into the top placeholder ──────────────────────────────────────────────
 
 PREVIEW_MAX_W = 900
 preview_scale = min(PREVIEW_MAX_W / out_w, 1.0)
 key = _cfg_key(config)
 
-with st.spinner("Rendering…"):
+with st.spinner("Rendering..."):
     preview_bytes = _generate_preview(key, scale=preview_scale)
 
 preview_img = Image.open(io.BytesIO(preview_bytes))
 img_placeholder.image(preview_img, use_container_width=True)
 caption_placeholder.caption(
-    f"Preview {preview_img.width}×{preview_img.height} px "
-    f"· output {out_w}×{out_h} px · {n_lines:,} lines"
+    f"Preview {preview_img.width}x{preview_img.height} px "
+    f"- output {out_w}x{out_h} px - {n_lines:,} lines"
 )
 
-# ── Export ─────────────────────────────────────────────────────────────────────
+# ── Export ──────────────────────────────────────────────────────────────────────────────────
 
 if render_full:
-    with st.spinner(f"Rendering {out_w}×{out_h} px…"):
+    with st.spinner(f"Rendering {out_w}x{out_h} px..."):
         full_bytes = _generate_full(key)
     st.download_button(
-        "⬇ Download PNG",
+        "Download PNG",
         data=full_bytes,
         file_name="scattered_lines.png",
         mime="image/png",

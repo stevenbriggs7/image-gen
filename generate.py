@@ -21,17 +21,17 @@ DEFAULTS: dict = {
     "noise_scale": 0.004,    # spatial frequency of the angle field
     "angle_range": 1.0,      # fraction of 2π covered by the field
     "length_median": 60.0,   # median line length in px (log-normal)
-    "length_spread": 0.6,    # log-σ: 0.1 = uniform, 1.5 = extreme variation
-    "margin": 0.0,           # fraction of each edge to exclude (0–0.45)
+    "length_spread": 0.6,    # log-sigma: 0.1 = uniform, 1.5 = extreme variation
+    "margin": 0.0,           # fraction of each edge to exclude (0-0.45)
     "stroke_width_min": 1.0,
     "stroke_width_max": 2.5,
-    "alpha_min": 50,         # 0–255
+    "alpha_min": 50,         # 0-255
     "alpha_max": 180,
     "bg_dark": False,
 }
 
 
-# ── Noise field ────────────────────────────────────────────────────────────────
+# ── Noise field ──────────────────────────────────────────────────────────────────────────────
 
 def _smooth_layer(width: int, height: int, grid_scale: float, seed: int) -> np.ndarray:
     """One octave of value noise: random coarse grid + smooth bilinear upsample."""
@@ -72,7 +72,7 @@ def _fractal_noise_field(
     width: int, height: int, noise_scale: float, seed: int,
     octaves: int = 4, persistence: float = 0.5, lacunarity: float = 2.0,
 ) -> np.ndarray:
-    """Sum of smooth layers at increasing frequencies → fractal noise (H, W)."""
+    """Sum of smooth layers at increasing frequencies -> fractal noise (H, W)."""
     field = np.zeros((height, width))
     amp, total, freq = 1.0, 0.0, noise_scale
     for k in range(octaves):
@@ -83,7 +83,7 @@ def _fractal_noise_field(
     return field / total
 
 
-# ── Main generation entry point ────────────────────────────────────────────────
+# ── Main generation entry point ───────────────────────────────────────────────────────────
 
 def generate(config: dict, scale: float = 1.0) -> Image.Image:
     """
@@ -98,7 +98,6 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     width    = max(10, int(cfg["output_width"]  * scale))
     height   = max(10, int(cfg["output_height"] * scale))
     n_lines  = int(cfg["n_lines"])
-    # Divide noise_scale by scale so spatial frequency is resolution-independent
     ns            = float(cfg["noise_scale"]) / max(scale, 0.05)
     a_range       = float(cfg["angle_range"]) * 2.0 * math.pi
     l_median      = float(cfg["length_median"]) * scale
@@ -115,14 +114,13 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
 
     rng = np.random.default_rng(seed)
 
-    # Starting positions — constrained to the inner rectangle defined by margin
+    # Starting positions constrained to the inner rectangle defined by margin
     x_min, x_max = width  * margin, width  * (1.0 - margin)
     y_min, y_max = height * margin, height * (1.0 - margin)
     xs = rng.uniform(x_min, x_max, n_lines)
     ys = rng.uniform(y_min, y_max, n_lines)
 
     # Log-normal length distribution: median controls centre, spread controls the tail.
-    # Heavy-tailed — produces a natural mix of fine short marks and sweeping long lines.
     log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)
     lengths = np.clip(np.exp(log_lengths), 3.0 * scale, max(width, height) * 1.5)
 
@@ -130,14 +128,14 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     widths = rng.uniform(sw_min, sw_max, n_lines)
     alphas = rng.integers(a_min, a_max, n_lines)
 
-    # Build the angle field (H, W); use a different seed offset for the field
+    # Build the angle field (H, W)
     noise_field = _fractal_noise_field(width, height, ns, seed=seed + 99991)
 
     # Sample angle at each line's start position
     xi = np.clip(xs.astype(np.intp), 0, width  - 1)
     yi = np.clip(ys.astype(np.intp), 0, height - 1)
-    nv = noise_field[yi, xi]             # ∈ [−1, 1] approximately
-    angles = (nv + 1.0) * 0.5 * a_range  # ∈ [0, angle_range]
+    nv = noise_field[yi, xi]
+    angles = (nv + 1.0) * 0.5 * a_range
 
     # Vectorised line endpoint computation
     halves = lengths * 0.5
