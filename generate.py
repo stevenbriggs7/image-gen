@@ -18,13 +18,14 @@ DEFAULTS: dict = {
     "output_width": 1200,
     "output_height": 800,
     "n_lines": 1500,
-    "noise_scale": 0.004,   # spatial frequency of the angle field
-    "angle_range": 1.0,     # fraction of 2π covered by the field
-    "length_mu": 80.0,      # mean line length (px at full resolution)
-    "length_sigma": 35.0,   # std dev of line length
+    "noise_scale": 0.004,    # spatial frequency of the angle field
+    "angle_range": 1.0,      # fraction of 2π covered by the field
+    "length_median": 60.0,   # median line length in px (log-normal)
+    "length_spread": 0.6,    # log-σ: 0.1 = uniform, 1.5 = extreme variation
+    "margin": 0.0,           # fraction of each edge to exclude (0–0.45)
     "stroke_width_min": 1.0,
     "stroke_width_max": 2.5,
-    "alpha_min": 50,        # 0–255
+    "alpha_min": 50,         # 0–255
     "alpha_max": 180,
     "bg_dark": False,
 }
@@ -98,29 +99,32 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     height   = max(10, int(cfg["output_height"] * scale))
     n_lines  = int(cfg["n_lines"])
     # Divide noise_scale by scale so spatial frequency is resolution-independent
-    ns       = float(cfg["noise_scale"]) / max(scale, 0.05)
-    a_range  = float(cfg["angle_range"]) * 2.0 * math.pi
-    l_mu     = float(cfg["length_mu"])    * scale
-    l_sig    = float(cfg["length_sigma"]) * scale
-    sw_min   = float(cfg["stroke_width_min"])
-    sw_max   = float(cfg["stroke_width_max"])
-    a_min    = int(cfg["alpha_min"])
-    a_max    = max(a_min + 1, int(cfg["alpha_max"]))
-    bg_dark  = bool(cfg["bg_dark"])
+    ns            = float(cfg["noise_scale"]) / max(scale, 0.05)
+    a_range       = float(cfg["angle_range"]) * 2.0 * math.pi
+    l_median      = float(cfg["length_median"]) * scale
+    l_spread      = float(cfg["length_spread"])
+    margin        = float(cfg["margin"])
+    sw_min        = float(cfg["stroke_width_min"])
+    sw_max        = float(cfg["stroke_width_max"])
+    a_min         = int(cfg["alpha_min"])
+    a_max         = max(a_min + 1, int(cfg["alpha_max"]))
+    bg_dark       = bool(cfg["bg_dark"])
 
     bg = (18,  18,  18)  if bg_dark else (245, 245, 240)
     fg = (220, 220, 215) if bg_dark else (20,  20,  25)
 
     rng = np.random.default_rng(seed)
 
-    # Starting positions
-    xs = rng.uniform(0.0, width,  n_lines)
-    ys = rng.uniform(0.0, height, n_lines)
+    # Starting positions — constrained to the inner rectangle defined by margin
+    x_min, x_max = width  * margin, width  * (1.0 - margin)
+    y_min, y_max = height * margin, height * (1.0 - margin)
+    xs = rng.uniform(x_min, x_max, n_lines)
+    ys = rng.uniform(y_min, y_max, n_lines)
 
-    # Lengths: Gaussian, clipped to a sane range
-    min_len = max(3.0, 3.0 * scale)
-    max_len = l_mu + 4.0 * l_sig
-    lengths = np.clip(rng.normal(l_mu, l_sig, n_lines), min_len, max_len)
+    # Log-normal length distribution: median controls centre, spread controls the tail.
+    # Heavy-tailed — produces a natural mix of fine short marks and sweeping long lines.
+    log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)
+    lengths = np.clip(np.exp(log_lengths), 3.0 * scale, max(width, height) * 1.5)
 
     # Stroke widths and alphas
     widths = rng.uniform(sw_min, sw_max, n_lines)

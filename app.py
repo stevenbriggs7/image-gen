@@ -50,9 +50,16 @@ with st.container(height=480, border=False):
             st.rerun()
 
     st.subheader("Lines")
-    n_lines      = st.slider("Count", 50, 5000, DEFAULTS["n_lines"], step=50)
-    length_mu    = st.slider("Length mean (px)", 10, 400, int(DEFAULTS["length_mu"]))
-    length_sigma = st.slider("Length std dev", 1, 200, int(DEFAULTS["length_sigma"]))
+    n_lines       = st.slider("Count", 50, 5000, DEFAULTS["n_lines"], step=50)
+    length_median = st.slider("Length median (px)", 5, 400, int(DEFAULTS["length_median"]))
+    length_spread = st.slider(
+        "Length variation", 0.1, 2.0, DEFAULTS["length_spread"], step=0.05, format="%.2f",
+        help="Log-normal spread. 0.1 = uniform, 0.6 = moderate, 1.5 = extreme (tiny marks to sweeping arcs).",
+    )
+    margin = st.slider(
+        "Edge margin", 0.0, 0.45, DEFAULTS["margin"], step=0.01, format="%.2f",
+        help="Fraction of the image to leave empty at each edge. 0 = full canvas, 0.2 = centred inner area.",
+    )
 
     st.subheader("Flow Field")
     noise_scale = st.slider(
@@ -107,8 +114,9 @@ config = {
     "n_lines": n_lines,
     "noise_scale": noise_scale,
     "angle_range": angle_range,
-    "length_mu": float(length_mu),
-    "length_sigma": float(length_sigma),
+    "length_median": float(length_median),
+    "length_spread": float(length_spread),
+    "margin": float(margin),
     "stroke_width_min": sw_min,
     "stroke_width_max": sw_max,
     "alpha_min": alpha_min,
