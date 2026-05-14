@@ -94,6 +94,11 @@ with st.container(height=500, border=False):
             (D["alpha_min"], D["alpha_max"]),
             key="l_alpha",
         )
+        flow_steps = st.slider(
+            "Curve steps", 1, 20, D["flow_steps"], step=1,
+            help="1 = straight lines. Higher values trace each stroke through the flow field, creating organic curves.",
+            key="l_flow",
+        )
         invert_overlap = st.toggle(
             "Invert overlap",
             value=D["invert_overlap"],
@@ -148,6 +153,7 @@ with st.container(height=500, border=False):
             help="Each circle inverts the tone beneath it. Overlapping circles cancel, showing the negative at intersections.",
             key="c_invert",
         )
+        flow_steps = 1  # not applicable to circles
 
     # ── Composition (shared) ──────────────────────────────────────────────────
     st.subheader("Composition")
@@ -171,7 +177,11 @@ with st.container(height=500, border=False):
     )
     # ── Color & Output (shared) ───────────────────────────────────────────────
     st.subheader("Color & Output")
-    bg_dark = st.toggle("Dark background", value=defaults["bg_dark"], key="shared_bg")
+    col_bg, col_fg = st.columns(2)
+    with col_bg:
+        bg_hex = st.color_picker("Background", defaults["bg_hex"], key="shared_bg")
+    with col_fg:
+        fg_hex = st.color_picker("Mark color", defaults["fg_hex"], key="shared_fg")
     out_w = st.select_slider(
         "Width (px)", [400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
         value=defaults["output_width"], key="shared_out_w",
@@ -201,7 +211,8 @@ if gen_type == "Lines":
         "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
         "stroke_width_min": sw_min, "stroke_width_max": sw_max,
         "alpha_min": alpha_min, "alpha_max": alpha_max,
-        "bg_dark": bg_dark,
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+        "flow_steps": flow_steps,
         "invert_overlap": invert_overlap,
     }
     label = "lines"
@@ -215,7 +226,7 @@ else:
         "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
         "filled": filled, "stroke_width": stroke_w,
         "alpha_min": alpha_min, "alpha_max": alpha_max,
-        "bg_dark": bg_dark,
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
         "invert_overlap": invert_overlap,
     }
     label = "circles"
