@@ -15,7 +15,7 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw
 
-from generate import _fractal_noise_field, _apply_composition_pull
+from generate import _fractal_noise_field
 
 DEFAULTS: dict = {
     "seed": 42,
@@ -35,8 +35,6 @@ DEFAULTS: dict = {
     "alpha_max": 110,
     "bg_dark": False,
     "invert_overlap": False,
-    "composition_mode": "none",  # "none" | "rule_of_thirds" | "golden_spiral"
-    "composition_strength": 0.3,
 }
 
 
@@ -66,8 +64,6 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     a_max           = max(a_min + 1, int(cfg["alpha_max"]))
     bg_dark         = bool(cfg["bg_dark"])
     invert_overlap  = bool(cfg["invert_overlap"])
-    comp_mode       = str(cfg["composition_mode"])
-    comp_strength   = float(cfg["composition_strength"])
 
     bg = (18,  18,  18)  if bg_dark else (245, 245, 240)
     fg = (220, 220, 215) if bg_dark else (20,  20,  25)
@@ -92,8 +88,6 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
         effective = math.sqrt(gravity)
         xs = xs + dx * effective * weight
         ys = ys + dy * effective * weight
-
-    xs, ys = _apply_composition_pull(xs, ys, width, height, margin, comp_mode, comp_strength)
 
     # Base radii: log-normal
     log_r = rng.normal(math.log(max(r_median, 1.0)), r_spread, n_circles)
