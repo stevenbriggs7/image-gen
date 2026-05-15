@@ -39,6 +39,9 @@ DEFAULTS: dict = {
     "alpha_max": 220,
     "bg_hex": "#f5f5f0",
     "fg_hex": "#141419",
+    "margin": 0.0,
+    "gravity": 0.0,
+    "gravity_falloff": 0.0,
 }
 
 
