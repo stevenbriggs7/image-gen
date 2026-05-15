@@ -25,7 +25,7 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw
 
-from generate import _hex_to_rgb
+from generate import _hex_to_rgb, _roughen_path, _taper_width
 
 DEFAULTS: dict = {
     "seed": 42,               # unused — curve is deterministic; kept for API parity
@@ -45,6 +45,10 @@ DEFAULTS: dict = {
     "gravity_falloff": 0.0,
     "bg_hex": "#f5f5f0",
     "fg_hex": "#141419",
+    "stroke_taper": 0.0,
+    "stroke_width_var": 0.0,
+    "stroke_break_density": 0.0,
+    "stroke_roughness": 0.0,
 }
 
 _CHUNK = 120  # steps per drawn segment for fade smoothness
@@ -69,6 +73,10 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     alpha_max = int(cfg["alpha_max"])
     alpha_min = int(cfg["alpha_min"])
     margin    = float(cfg["margin"])
+    taper     = float(cfg.get("stroke_taper", 0.0))
+    width_var = float(cfg.get("stroke_width_var", 0.0))
+    break_p   = float(cfg.get("stroke_break_density", 0.0))
+    roughness = float(cfg.get("stroke_roughness", 0.0))
 
     bg = _hex_to_rgb(str(cfg["bg_hex"]))
     fg = _hex_to_rgb(str(cfg["fg_hex"]))
@@ -120,14 +128,22 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     img  = Image.new("RGB", (width, height), bg)
     draw = ImageDraw.Draw(img)
 
+    rng  = np.random.default_rng(int(cfg["seed"]))
+    path = np.column_stack([px, py])
+    if roughness > 0.0:
+        path = _roughen_path(path, roughness * stroke_w, rng)
+
     total = len(px) - 1
     for start in range(0, total, _CHUNK):
+        if break_p > 0.0 and rng.random() < break_p:
+            continue
         end  = min(start + _CHUNK + 1, total + 1)
-        pts  = [(float(px[s]), float(py[s])) for s in range(start, end)]
+        pts  = [(float(path[s, 0]), float(path[s, 1])) for s in range(start, end)]
         if len(pts) < 2:
             continue
         t_frac = start / max(total - 1, 1)
         alpha  = int(alpha_max + (alpha_min - alpha_max) * t_frac)
-        draw.line(pts, fill=color_lut[max(0, min(255, alpha))], width=stroke_w)
+        eff_w  = stroke_w * (1.0 + width_var * (rng.random() - 0.5) * 2.0) if width_var > 0.0 else stroke_w
+        draw.line(pts, fill=color_lut[max(0, min(255, alpha))], width=_taper_width(eff_w, t_frac, taper))
 
     return img
