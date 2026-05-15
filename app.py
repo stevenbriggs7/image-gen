@@ -346,15 +346,20 @@ with st.container(height=500, border=False):
         D = gen_pendulum.DEFAULTS
 
         st.subheader("Pendulum")
+        precession = st.slider(
+            "Precession", 0.01, 0.5, D["precession"], step=0.01, format="%.2f",
+            help="How fast the orbit rotates. Lower = more petals (≈1/value). 0.1 → ~10 petals, 0.33 → ~3.",
+            key="p_prec",
+        )
         aspect = st.slider(
             "Shape", 0.1, 1.0, D["aspect"], step=0.05, format="%.2f",
-            help="1.0 = circle, lower = squashed ellipse.",
+            help="1.0 = circular orbit, lower = squashed — makes petals more elongated.",
             key="p_aspect",
         )
-        tilt = st.slider(
-            "Tilt (°)", 0, 180, int(D["tilt"]), step=5,
-            help="Rotation of the ellipse axes.",
-            key="p_tilt",
+        phase = st.slider(
+            "Phase", 0.0, 1.0, D["phase"], step=0.05, format="%.2f",
+            help="Starting offset between x and y. 0.25 = circular start, 0 = straight-line start.",
+            key="p_phase",
         )
         amplitude = st.slider(
             "Amplitude", 0.3, 1.0, D["amplitude"], step=0.05, format="%.2f",
@@ -497,8 +502,9 @@ elif gen_type == "Pendulum":
     config = {
         "seed": int(seed),
         "output_width": out_w, "output_height": out_h,
+        "precession": float(precession),
         "aspect": float(aspect),
-        "tilt": float(tilt),
+        "phase": float(phase),
         "damping": float(damping),
         "n_steps": int(n_steps),
         "amplitude": float(amplitude),
