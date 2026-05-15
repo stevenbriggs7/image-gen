@@ -17,6 +17,9 @@ import generate_wave as gen_wave
 import generate_pendulum as gen_pendulum
 import generate_shapes as gen_shapes
 import generate_attractor as gen_attractor
+import generate_streamlines as gen_streamlines
+import generate_voronoi as gen_voronoi
+import generate_spirograph as gen_spirograph
 
 
 # ── Mood colour system ─────────────────────────────────────────────────────────
@@ -159,7 +162,7 @@ with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
-        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor"],
+        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines", "Voronoi", "Spirograph"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -167,12 +170,15 @@ with st.container(height=500, border=False):
     st.divider()
 
     # Seed (shared)
-    defaults = (gen_lines.DEFAULTS      if gen_type == "Lines"
-                else gen_circles.DEFAULTS   if gen_type == "Circles"
-                else gen_wave.DEFAULTS      if gen_type == "Wave"
-                else gen_pendulum.DEFAULTS  if gen_type == "Pendulum"
-                else gen_shapes.DEFAULTS    if gen_type == "Shapes"
-                else gen_attractor.DEFAULTS)
+    defaults = (gen_lines.DEFAULTS          if gen_type == "Lines"
+                else gen_circles.DEFAULTS       if gen_type == "Circles"
+                else gen_wave.DEFAULTS          if gen_type == "Wave"
+                else gen_pendulum.DEFAULTS      if gen_type == "Pendulum"
+                else gen_shapes.DEFAULTS        if gen_type == "Shapes"
+                else gen_attractor.DEFAULTS     if gen_type == "Attractor"
+                else gen_streamlines.DEFAULTS   if gen_type == "Streamlines"
+                else gen_voronoi.DEFAULTS       if gen_type == "Voronoi"
+                else gen_spirograph.DEFAULTS)
     col_btn, col_val = st.columns([2, 3])
     with col_btn:
         if st.button("Randomize", use_container_width=True):
@@ -482,6 +488,110 @@ with st.container(height=500, border=False):
             key="at_gamma",
         )
 
+    elif gen_type == "Streamlines":
+        D = gen_streamlines.DEFAULTS
+
+        st.subheader("Flow")
+        n_lines = st.slider("Streams", 10, 500, D["n_lines"], step=10, key="sl_count")
+        n_steps = st.slider(
+            "Steps", 50, 2000, D["n_steps"], step=50,
+            help="How far each stream travels. More steps = longer, more winding paths.",
+            key="sl_steps",
+        )
+        step_size = st.slider(
+            "Step size (px)", 1.0, 20.0, D["step_size"], step=0.5, format="%.1f",
+            help="Distance moved each step. Larger = faster but coarser curves.",
+            key="sl_step_size",
+        )
+
+        st.subheader("Field")
+        noise_scale = st.slider(
+            "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
+            help="Low = sweeping river-like paths. High = chaotic turbulence.",
+            key="sl_noise_scale",
+        )
+        angle_range = st.slider(
+            "Angle range (x 2pi)", 0.05, 1.0, D["angle_range"], step=0.05, format="%.2f",
+            help="1.0 = any direction; 0.25 = constrained to a quadrant.",
+            key="sl_angle_range",
+        )
+
+        st.subheader("Stroke")
+        stroke_width = st.slider("Width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="sl_sw")
+        alpha_max = st.slider(
+            "Opacity start (0-255)", 0, 255, D["alpha_max"],
+            help="Opacity at the start of each stream (freshest ink).",
+            key="sl_alpha_max",
+        )
+        alpha_min = st.slider(
+            "Opacity end (0-255)", 0, 255, D["alpha_min"],
+            help="Opacity at the end of each stream (ink thinning).",
+            key="sl_alpha_min",
+        )
+
+    elif gen_type == "Voronoi":
+        D = gen_voronoi.DEFAULTS
+
+        st.subheader("Cells")
+        n_cells = st.slider("Cell count", 10, 800, D["n_cells"], step=10, key="vo_count")
+
+        st.subheader("Noise")
+        noise_scale = st.slider(
+            "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
+            help="Spatial scale of the density field. Low = large blobs, high = fine grain.",
+            key="vo_noise_scale",
+        )
+        noise_influence = st.slider(
+            "Noise influence", 0.0, 1.5, D["noise_influence"], step=0.05, format="%.2f",
+            help="How strongly the field modulates cell shading. 0 = uniform.",
+            key="vo_noise_inf",
+        )
+
+        st.subheader("Style")
+        filled = st.toggle("Filled cells", value=D["filled"],
+                           help="Off = outlines only (cracked-earth look).", key="vo_filled")
+        stroke_w = st.slider("Outline width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="vo_stroke")
+        alpha_min, alpha_max = st.slider(
+            "Opacity range (0-255)", 0, 255,
+            (D["alpha_min"], D["alpha_max"]),
+            key="vo_alpha",
+        )
+
+    elif gen_type == "Spirograph":
+        D = gen_spirograph.DEFAULTS
+
+        st.subheader("Gears")
+        spiro_mode = st.selectbox(
+            "Type", ["Hypo (inner rolling)", "Epi (outer rolling)"],
+            index=0 if D["mode"] == "hypo" else 1,
+            key="sp_mode",
+        )
+        R_val = st.slider("Outer radius R", 2, 20, int(D["R"]), step=1,
+                          help="Fixed gear radius. Number of petals ≈ R / gcd(R, r).",
+                          key="sp_R")
+        r_val = st.slider("Inner radius r", 1, 15, int(D["r"]), step=1,
+                          help="Rolling gear radius. Curve closes after r / gcd(R, r) loops.",
+                          key="sp_r")
+        d_val = st.slider(
+            "Pen distance d", 0.5, 20.0, float(D["d"]), step=0.5, format="%.1f",
+            help="Distance of pen from rolling gear center. d = r gives a classic hypocycloid.",
+            key="sp_d",
+        )
+
+        st.subheader("Trace")
+        n_repeats = st.slider(
+            "Repeats", 1, 5, D["n_repeats"], step=1,
+            help="Retrace the closed pattern this many times for a layered, denser look.",
+            key="sp_repeats",
+        )
+
+        st.subheader("Stroke")
+        stroke_width = st.slider("Width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="sp_sw")
+        sp_alpha_max = st.slider("Opacity start (0-255)", 0, 255, D["alpha_max"],
+                                 help="Opacity at the start of the trace.", key="sp_alpha_max")
+        sp_alpha_min = st.slider("Opacity end (0-255)", 0, 255, D["alpha_min"],
+                                 help="Opacity at the end of the trace.", key="sp_alpha_min")
+
     # ── Composition (shared) ──────────────────────────────────────────────────
     st.subheader("Composition")
     margin = st.slider(
@@ -624,6 +734,49 @@ elif gen_type == "Attractor":
         "bg_hex": bg_hex, "fg_hex": fg_hex,
     }
     label = "attractor"
+elif gen_type == "Streamlines":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "n_lines": int(n_lines),
+        "n_steps": int(n_steps),
+        "step_size": float(step_size),
+        "noise_scale": float(noise_scale),
+        "angle_range": float(angle_range),
+        "stroke_width": float(stroke_width),
+        "alpha_max": int(alpha_max),
+        "alpha_min": int(alpha_min),
+        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+    }
+    label = "streamlines"
+elif gen_type == "Voronoi":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "n_cells": int(n_cells),
+        "noise_scale": float(noise_scale),
+        "noise_influence": float(noise_influence),
+        "filled": filled,
+        "stroke_width": float(stroke_w),
+        "alpha_min": int(alpha_min), "alpha_max": int(alpha_max),
+        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+    }
+    label = "voronoi"
+elif gen_type == "Spirograph":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "R": int(R_val), "r": int(r_val), "d": float(d_val),
+        "mode": "hypo" if spiro_mode.startswith("Hypo") else "epi",
+        "n_repeats": int(n_repeats),
+        "stroke_width": float(stroke_width),
+        "alpha_max": int(sp_alpha_max), "alpha_min": int(sp_alpha_min),
+        "margin": float(margin), "gravity": 0.0, "gravity_falloff": 0.0,
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+    }
+    label = "spirograph"
 else:
     config = {
         "seed": int(seed),
@@ -645,11 +798,14 @@ else:
 @st.cache_data(max_entries=40, show_spinner=False)
 def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
     cfg = dict(zip(cfg_key[::2], cfg_key[1::2]))
-    fn = (gen_lines.generate       if gen_type == "Lines"
-          else gen_circles.generate   if gen_type == "Circles"
-          else gen_wave.generate      if gen_type == "Wave"
-          else gen_pendulum.generate  if gen_type == "Pendulum"
-          else gen_shapes.generate    if gen_type == "Shapes"
+    fn = (gen_lines.generate           if gen_type == "Lines"
+          else gen_circles.generate       if gen_type == "Circles"
+          else gen_wave.generate          if gen_type == "Wave"
+          else gen_pendulum.generate      if gen_type == "Pendulum"
+          else gen_shapes.generate        if gen_type == "Shapes"
+          else gen_streamlines.generate   if gen_type == "Streamlines"
+          else gen_voronoi.generate       if gen_type == "Voronoi"
+          else gen_spirograph.generate    if gen_type == "Spirograph"
           else gen_attractor.generate)
     img = fn(cfg, scale=scale)
     buf = io.BytesIO()
