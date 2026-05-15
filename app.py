@@ -346,20 +346,15 @@ with st.container(height=500, border=False):
         D = gen_pendulum.DEFAULTS
 
         st.subheader("Pendulum")
-        freq_ratio = st.slider(
-            "Frequency ratio", 0.5, 3.0, D["freq_ratio"], step=0.05, format="%.2f",
-            help="Ratio of x to y oscillation. 1=ellipse, 2=figure-8, 1.5=trefoil-ish.",
-            key="p_ratio",
+        aspect = st.slider(
+            "Shape", 0.1, 1.0, D["aspect"], step=0.05, format="%.2f",
+            help="1.0 = circle, lower = squashed ellipse.",
+            key="p_aspect",
         )
-        freq_delta = st.slider(
-            "Precession", 0.0, 0.02, D["freq_delta"], step=0.001, format="%.3f",
-            help="Tiny frequency difference that makes the pattern slowly rotate and fill in.",
-            key="p_delta",
-        )
-        phase = st.slider(
-            "Phase", 0.0, 1.0, D["phase"], step=0.05, format="%.2f",
-            help="Initial phase offset (0=diagonal line, 0.25=circle, other=ellipse).",
-            key="p_phase",
+        tilt = st.slider(
+            "Tilt (°)", 0, 180, int(D["tilt"]), step=5,
+            help="Rotation of the ellipse axes.",
+            key="p_tilt",
         )
         amplitude = st.slider(
             "Amplitude", 0.3, 1.0, D["amplitude"], step=0.05, format="%.2f",
@@ -502,12 +497,10 @@ elif gen_type == "Pendulum":
     config = {
         "seed": int(seed),
         "output_width": out_w, "output_height": out_h,
-        "freq_ratio": float(freq_ratio),
-        "freq_delta": float(freq_delta),
-        "phase": float(phase),
+        "aspect": float(aspect),
+        "tilt": float(tilt),
         "damping": float(damping),
         "n_steps": int(n_steps),
-        "time_scale": 1.0,
         "amplitude": float(amplitude),
         "flow_rate": float(flow_rate),
         "stroke_width": float(stroke_width),

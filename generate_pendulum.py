@@ -1,17 +1,14 @@
 """
-Pendulum pour: a continuous paint trail tracing a damped harmonograph path.
+Pendulum pour: a paint pot on a rope swung in a circle or ellipse over a canvas.
 
-Physical model: a paint pot suspended on a rope is spun and released over a
-canvas. The rope creates two perpendicular oscillations (x and y). A tiny
-frequency difference between them causes the pattern to slowly precess — the
-"spinning" effect. The amplitude decays exponentially as energy is lost, and
-the paint grows fainter as the pot empties.
+The pot traces a circular/elliptical spiral that tightens as the swing decays.
+`aspect` squashes the circle into an ellipse; `tilt` rotates the ellipse axes.
+Paint fades as the pot empties.
 
-Equations:
-  x(t) = A · sin(f₁·t + φ) · exp(−d·t)
-  y(t) = A · sin(f₂·t)     · exp(−d·t)
-
-where f₁ = 1 + freq_delta, f₂ = freq_ratio, and d = damping.
+Equation:
+  x_raw(t) = A · cos(t) · exp(−d·t)
+  y_raw(t) = A · aspect · sin(t) · exp(−d·t)
+  [x, y] = rotate [x_raw, y_raw] by tilt degrees
 """
 
 import math
@@ -24,20 +21,18 @@ DEFAULTS: dict = {
     "seed": 42,
     "output_width": 1200,
     "output_height": 800,
-    # Pendulum physics
-    "freq_ratio": 1.0,      # f₂/f₁ — 1=ellipse, 2=figure-8, 1.5=trefoil-ish
-    "freq_delta": 0.004,    # tiny offset on f₁ causing slow precession
-    "phase": 0.25,          # initial phase difference 0–1 → 0–2π (0=line, 0.25=circle)
-    "damping": 0.0003,      # amplitude decay rate per unit time
-    "n_steps": 60000,       # simulation steps (more = longer trail / more loops)
-    "time_scale": 1.0,      # dt multiplier
-    "amplitude": 0.88,      # initial swing as fraction of min(width, height)/2
+    # Pendulum shape
+    "aspect": 1.0,       # y/x amplitude ratio: 1.0 = circle, <1 = squashed
+    "tilt": 0.0,         # rotation of ellipse axes in degrees
+    "damping": 0.0003,   # amplitude decay rate — controls how tight the spiral is
+    "n_steps": 60000,    # simulation steps (more = more loops before centre)
+    "amplitude": 0.88,   # initial swing as fraction of min(width, height)/2
     # Paint
-    "flow_rate": 0.7,       # opacity fade rate (0=constant, 2=fast)
+    "flow_rate": 0.7,    # opacity fade rate (0=constant ink, 2=fast fade)
     "stroke_width": 2.0,
     "alpha_max": 200,
     "alpha_min": 8,
-    # Shared (unused by this generator but required by the shared UI sections)
+    # Shared (read by shared UI sections)
     "margin": 0.0,
     "gravity": 0.0,
     "gravity_falloff": 0.0,
@@ -46,51 +41,49 @@ DEFAULTS: dict = {
     "fg_hex": "#141419",
 }
 
-# Steps per rendered polyline chunk — balances draw-call overhead vs colour fidelity
-_CHUNK = 200
+_CHUNK = 200  # steps per polyline batch
 
 
 def generate(config: dict, scale: float = 1.0) -> Image.Image:
     """
-    Simulate a damped harmonograph and render the paint trail.
+    Simulate a damped circular/elliptical pendulum and render the paint trail.
 
     scale < 1.0 produces a proportionally smaller image (useful for previews).
     """
     cfg = {**DEFAULTS, **config}
 
-    width       = max(10, int(cfg["output_width"]  * scale))
-    height      = max(10, int(cfg["output_height"] * scale))
-    freq_ratio  = float(cfg["freq_ratio"])
-    freq_delta  = float(cfg["freq_delta"])
-    phase_rad   = float(cfg["phase"]) * 2.0 * math.pi
-    damping     = float(cfg["damping"])
-    n_steps     = int(cfg["n_steps"])
-    time_scale  = float(cfg["time_scale"])
-    amplitude   = float(cfg["amplitude"])
-    flow_rate   = float(cfg["flow_rate"])
-    stroke_w    = max(1, round(float(cfg["stroke_width"])))
-    alpha_max   = int(cfg["alpha_max"])
-    alpha_min   = int(cfg["alpha_min"])
+    width      = max(10, int(cfg["output_width"]  * scale))
+    height     = max(10, int(cfg["output_height"] * scale))
+    aspect     = float(cfg["aspect"])
+    tilt_rad   = math.radians(float(cfg["tilt"]))
+    damping    = float(cfg["damping"])
+    n_steps    = int(cfg["n_steps"])
+    amplitude  = float(cfg["amplitude"])
+    flow_rate  = float(cfg["flow_rate"])
+    stroke_w   = max(1, round(float(cfg["stroke_width"])))
+    alpha_max  = int(cfg["alpha_max"])
+    alpha_min  = int(cfg["alpha_min"])
 
     bg = _hex_to_rgb(str(cfg["bg_hex"]))
     fg = _hex_to_rgb(str(cfg["fg_hex"]))
 
     # ── 1. Time array ─────────────────────────────────────────────────────────
-    dt = 0.05 * time_scale
+    dt = 0.05
     t  = np.arange(n_steps, dtype=np.float64) * dt
 
-    # ── 2. Frequencies ────────────────────────────────────────────────────────
-    f1 = 1.0 + freq_delta   # x frequency — precession lives here
-    f2 = freq_ratio         # y frequency
+    # ── 2. Elliptical path with decay ─────────────────────────────────────────
+    cx, cy  = width * 0.5, height * 0.5
+    R       = min(width, height) * 0.5 * amplitude
+    decay   = np.exp(-damping * t)
 
-    # ── 3. Path ───────────────────────────────────────────────────────────────
-    cx, cy   = width * 0.5, height * 0.5
-    half_w   = cx * amplitude
-    half_h   = cy * amplitude
-    decay    = np.exp(-damping * t)
+    x_raw = R * np.cos(t) * decay
+    y_raw = R * aspect * np.sin(t) * decay
 
-    xs = cx + half_w * np.sin(f1 * t + phase_rad) * decay
-    ys = cy + half_h * np.sin(f2 * t)             * decay
+    # ── 3. Tilt rotation ──────────────────────────────────────────────────────
+    cos_tilt = math.cos(tilt_rad)
+    sin_tilt = math.sin(tilt_rad)
+    xs = cx + x_raw * cos_tilt - y_raw * sin_tilt
+    ys = cy + x_raw * sin_tilt + y_raw * cos_tilt
 
     # ── 4. Per-step opacity (pot emptying) ────────────────────────────────────
     t_norm = t / max(t[-1], 1.0)
