@@ -133,10 +133,9 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     ys = cy + u * sin_t + v_new * cos_t
 
     # ── 6. Perpendicular angle in canvas space ────────────────────────────────
-    # Wave tangent vector: (cos θ − k·sin θ,  sin θ + k·cos θ)
-    # Perpendicular (90° CCW): (−sin θ − k·cos θ,  cos θ − k·sin θ)
-    k          = wave_amp * 2.0 * math.pi * wave_freq / span * np.cos(phase_arg)
-    perp_angle = np.arctan2(cos_t - k * sin_t, -(sin_t + k * cos_t))
+    # Lines point perpendicular to the wave's travel direction (not the local slope).
+    # For wave_angle=0° (horizontal), lines are vertical (π/2). Scalar, not per-point.
+    perp_angle = theta + math.pi / 2
 
     # ── 7. Blend with random angles and add spread ────────────────────────────
     rand_angles = rng.uniform(0.0, 2.0 * math.pi, n_lines)
