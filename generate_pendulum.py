@@ -1,14 +1,19 @@
 """
-Pendulum pour: a paint pot on a rope swung in a circle or ellipse over a canvas.
+Pendulum pour: rosette pattern from a spin-launched pendulum over a canvas.
 
-The pot traces a circular/elliptical spiral that tightens as the swing decays.
-`aspect` squashes the circle into an ellipse; `tilt` rotates the ellipse axes.
-Paint fades as the pot empties.
+Physical model: a paint pot on a rope is spun and released. The x and y axes
+of the pendulum have a tiny natural frequency mismatch (ε) — no real pivot is
+perfectly isotropic. That mismatch causes the elliptical orbit to precess
+(rotate) on every loop, building up the characteristic petal/rosette patterns
+seen in real pendulum paintings.
 
-Equation:
-  x_raw(t) = A · cos(t) · exp(−d·t)
-  y_raw(t) = A · aspect · sin(t) · exp(−d·t)
-  [x, y] = rotate [x_raw, y_raw] by tilt degrees
+Equations (anisotropic damped oscillator):
+  x(t) = A         · cos(ω₀·t)           · exp(−γ·t)
+  y(t) = A · aspect · sin(ω₀·(1+ε)·t + φ) · exp(−γ·t)
+
+Approximate petal count ≈ 1/ε.
+Period is independent of mass, so the pot emptying only changes amplitude
+decay — already captured by γ (damping) and flow_rate (paint opacity).
 """
 
 import math
@@ -22,11 +27,12 @@ DEFAULTS: dict = {
     "output_width": 1200,
     "output_height": 800,
     # Pendulum shape
-    "aspect": 1.0,       # y/x amplitude ratio: 1.0 = circle, <1 = squashed
-    "tilt": 0.0,         # rotation of ellipse axes in degrees
-    "damping": 0.0003,   # amplitude decay rate — controls how tight the spiral is
-    "n_steps": 60000,    # simulation steps (more = more loops before centre)
+    "precession": 0.08,  # ε — frequency mismatch; ≈1/ε petals form in the rosette
+    "aspect": 1.0,       # y/x amplitude ratio: 1.0 = circular orbit, <1 = squashed
+    "phase": 0.25,       # initial phase offset (0–1 → 0–2π); 0.25 = circular start
     "amplitude": 0.88,   # initial swing as fraction of min(width, height)/2
+    "damping": 0.0003,   # amplitude decay rate — tighter spiral at higher values
+    "n_steps": 60000,    # simulation steps (more = more loops before centre)
     # Paint
     "flow_rate": 0.7,    # opacity fade rate (0=constant ink, 2=fast fade)
     "stroke_width": 2.0,
@@ -46,7 +52,7 @@ _CHUNK = 200  # steps per polyline batch
 
 def generate(config: dict, scale: float = 1.0) -> Image.Image:
     """
-    Simulate a damped circular/elliptical pendulum and render the paint trail.
+    Simulate a precessing-ellipse pendulum and render the rosette paint trail.
 
     scale < 1.0 produces a proportionally smaller image (useful for previews).
     """
@@ -54,11 +60,12 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
 
     width      = max(10, int(cfg["output_width"]  * scale))
     height     = max(10, int(cfg["output_height"] * scale))
+    precession = float(cfg["precession"])
     aspect     = float(cfg["aspect"])
-    tilt_rad   = math.radians(float(cfg["tilt"]))
+    phase_rad  = float(cfg["phase"]) * 2.0 * math.pi
+    amplitude  = float(cfg["amplitude"])
     damping    = float(cfg["damping"])
     n_steps    = int(cfg["n_steps"])
-    amplitude  = float(cfg["amplitude"])
     flow_rate  = float(cfg["flow_rate"])
     stroke_w   = max(1, round(float(cfg["stroke_width"])))
     alpha_max  = int(cfg["alpha_max"])
@@ -71,19 +78,17 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     dt = 0.05
     t  = np.arange(n_steps, dtype=np.float64) * dt
 
-    # ── 2. Elliptical path with decay ─────────────────────────────────────────
-    cx, cy  = width * 0.5, height * 0.5
-    R       = min(width, height) * 0.5 * amplitude
-    decay   = np.exp(-damping * t)
+    # ── 2. Frequencies ────────────────────────────────────────────────────────
+    omega_0 = 1.0
+    omega_y = omega_0 * (1.0 + precession)   # tiny mismatch → precession
 
-    x_raw = R * np.cos(t) * decay
-    y_raw = R * aspect * np.sin(t) * decay
+    # ── 3. Precessing ellipse path ────────────────────────────────────────────
+    cx, cy = width * 0.5, height * 0.5
+    R      = min(width, height) * 0.5 * amplitude
+    decay  = np.exp(-damping * t)
 
-    # ── 3. Tilt rotation ──────────────────────────────────────────────────────
-    cos_tilt = math.cos(tilt_rad)
-    sin_tilt = math.sin(tilt_rad)
-    xs = cx + x_raw * cos_tilt - y_raw * sin_tilt
-    ys = cy + x_raw * sin_tilt + y_raw * cos_tilt
+    xs = cx + R          * np.cos(omega_0 * t)                * decay
+    ys = cy + R * aspect * np.sin(omega_y  * t + phase_rad)   * decay
 
     # ── 4. Per-step opacity (pot emptying) ────────────────────────────────────
     t_norm = t / max(t[-1], 1.0)
