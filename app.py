@@ -19,6 +19,7 @@ import generate_shapes as gen_shapes
 import generate_attractor as gen_attractor
 import generate_streamlines as gen_streamlines
 import generate_voronoi as gen_voronoi
+import generate_cubes as gen_cubes
 import generate_spirograph as gen_spirograph
 
 
@@ -165,7 +166,7 @@ with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
-        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines", "Voronoi", "Spirograph"],
+        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines", "Voronoi", "Cubes", "Spirograph"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -181,9 +182,10 @@ with st.container(height=500, border=False):
                 else gen_attractor.DEFAULTS     if gen_type == "Attractor"
                 else gen_streamlines.DEFAULTS   if gen_type == "Streamlines"
                 else gen_voronoi.DEFAULTS       if gen_type == "Voronoi"
+                else gen_cubes.DEFAULTS         if gen_type == "Cubes"
                 else gen_spirograph.DEFAULTS)
     # Seed — shown only for generators with random variation
-    _SEED_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi"}
+    _SEED_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi", "Cubes"}
     seed = st.session_state.art_seed
     if gen_type in _SEED_TYPES:
         col_btn, col_val = st.columns([2, 3])
@@ -563,6 +565,66 @@ with st.container(height=500, border=False):
             key="vo_alpha",
         )
 
+    elif gen_type == "Cubes":
+        D = gen_cubes.DEFAULTS
+
+        st.subheader("Cubes")
+        n_cubes      = st.slider("Count", 20, 1000, D["n_cubes"], step=20, key="cu_count")
+        size_median  = st.slider("Size median (px)", 5, 200, int(D["size_median"]), key="cu_size_med")
+        size_spread  = st.slider(
+            "Size variation", 0.1, 1.5, D["size_spread"], step=0.05, format="%.2f",
+            key="cu_size_spread",
+        )
+
+        st.subheader("Noise")
+        noise_scale = st.slider(
+            "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
+            help="Spatial scale of size clustering. Low = large blobs, high = fine grain.",
+            key="cu_noise_scale",
+        )
+        noise_influence = st.slider(
+            "Noise influence", 0.0, 1.5, D["noise_influence"], step=0.05, format="%.2f",
+            help="How strongly noise modulates cube size. 0 = pure random.",
+            key="cu_noise_inf",
+        )
+
+        st.subheader("Style")
+        filled = st.toggle("Filled", value=D["filled"], key="cu_filled")
+        stroke_w = st.slider("Outline width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="cu_stroke")
+        alpha_min, alpha_max = st.slider(
+            "Opacity range (0-255)", 0, 255,
+            (D["alpha_min"], D["alpha_max"]),
+            key="cu_alpha",
+        )
+        shade_contrast = st.slider(
+            "Shade contrast", 0.0, 1.0, D["shade_contrast"], step=0.05, format="%.2f",
+            help="How different the three face shades are. 0 = flat, 1 = strong light/shadow.",
+            key="cu_shade",
+        )
+
+        st.subheader("Warp")
+        cu_warp_label = st.selectbox(
+            "Warp type", ["None", "Wave", "Sphere"],
+            index=0,
+            help="Displaces each vertex by an invisible field, bending the cube faces.",
+            key="cu_warp_type",
+        )
+        warp_type = cu_warp_label.lower()
+        if warp_type != "none":
+            warp_amplitude = st.slider(
+                "Warp amplitude", 0.0, 1.0, D["warp_amplitude"], step=0.05, format="%.2f",
+                help="Displacement strength as a fraction of cube size.",
+                key="cu_warp_amp",
+            )
+            warp_scale = st.slider(
+                "Warp scale", 0.001, 0.02, D["warp_scale"], step=0.001, format="%.3f",
+                help="Wave: spatial frequency. Sphere: falloff rate from canvas centre.",
+                key="cu_warp_scale",
+            )
+        else:
+            warp_amplitude = 0.0
+            warp_scale = D["warp_scale"]
+
     elif gen_type == "Spirograph":
         D = gen_spirograph.DEFAULTS
 
@@ -633,7 +695,7 @@ with st.container(height=500, border=False):
         help="Fraction of the image to leave empty at each edge.",
         key="shared_margin",
     )
-    _GRAVITY_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi"}
+    _GRAVITY_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi", "Cubes"}
     if gen_type in _GRAVITY_TYPES:
         gravity = st.slider(
             "Gravity strength", 0.0, 0.95, defaults["gravity"],
@@ -804,6 +866,21 @@ elif gen_type == "Voronoi":
         "bg_hex": bg_hex, "fg_hex": fg_hex,
     }
     label = "voronoi"
+elif gen_type == "Cubes":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "n_cubes": int(n_cubes),
+        "size_median": float(size_median), "size_spread": float(size_spread),
+        "noise_scale": float(noise_scale), "noise_influence": float(noise_influence),
+        "filled": filled, "stroke_width": float(stroke_w),
+        "alpha_min": int(alpha_min), "alpha_max": int(alpha_max),
+        "shade_contrast": float(shade_contrast),
+        "warp_type": warp_type, "warp_amplitude": float(warp_amplitude), "warp_scale": float(warp_scale),
+        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+    }
+    label = "cubes"
 elif gen_type == "Spirograph":
     config = {
         "seed": int(seed),
@@ -847,6 +924,7 @@ def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
           else gen_shapes.generate        if gen_type == "Shapes"
           else gen_streamlines.generate   if gen_type == "Streamlines"
           else gen_voronoi.generate       if gen_type == "Voronoi"
+          else gen_cubes.generate         if gen_type == "Cubes"
           else gen_spirograph.generate    if gen_type == "Spirograph"
           else gen_attractor.generate)
     img = fn(cfg, scale=scale)
