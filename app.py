@@ -144,13 +144,16 @@ header[data-testid="stHeader"] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
-# Colour seed session state — randomised on first load and on mood change
+# Session state
 if "art_seed" not in st.session_state:
     st.session_state.art_seed = 42
 if "colour_seed" not in st.session_state:
-    st.session_state.colour_seed = 0
-if "prev_mood" not in st.session_state:
-    st.session_state.prev_mood = None
+    st.session_state.colour_seed = random.randint(0, 99999)
+
+
+def _reroll_colours() -> None:
+    st.session_state.colour_seed = random.randint(0, 99999)
+
 
 # Image placeholder at top — filled after params are collected
 img_placeholder     = st.empty()
@@ -179,15 +182,18 @@ with st.container(height=500, border=False):
                 else gen_streamlines.DEFAULTS   if gen_type == "Streamlines"
                 else gen_voronoi.DEFAULTS       if gen_type == "Voronoi"
                 else gen_spirograph.DEFAULTS)
-    col_btn, col_val = st.columns([2, 3])
-    with col_btn:
-        if st.button("Randomize", use_container_width=True):
-            st.session_state.art_seed = random.randint(0, 99999)
-            st.rerun()
-    with col_val:
-        st.write("")
-        st.caption(f"seed {st.session_state.art_seed}")
+    # Seed — shown only for generators with random variation
+    _SEED_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi"}
     seed = st.session_state.art_seed
+    if gen_type in _SEED_TYPES:
+        col_btn, col_val = st.columns([2, 3])
+        with col_btn:
+            if st.button("Randomize", use_container_width=True):
+                st.session_state.art_seed = random.randint(0, 99999)
+                seed = st.session_state.art_seed
+        with col_val:
+            st.write("")
+            st.caption(f"seed {seed}")
 
     # ── Lines controls ────────────────────────────────────────────────────────
     if gen_type == "Lines":
@@ -649,28 +655,23 @@ with st.container(height=500, border=False):
             list(_MOOD_LABELS.keys()),
             format_func=_MOOD_LABELS.get,
             key="shared_mood",
+            on_change=_reroll_colours,
         )
     with col_reroll:
         st.write("")
         if st.button("Re-roll", key="shared_reroll", use_container_width=True,
                      help="Pick new colours within this mood"):
-            st.session_state.colour_seed = random.randint(0, 99999)
-            st.rerun()
-
-    # Randomise colours whenever the mood changes
-    if mood != st.session_state.prev_mood:
-        st.session_state.colour_seed = random.randint(0, 99999)
-        st.session_state.prev_mood = mood
+            _reroll_colours()
 
     bg_hex, fg_hex = mood_colors(mood, st.session_state.colour_seed)
 
     out_w = st.select_slider(
         "Width (px)", [400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
-        value=defaults["output_width"], key="shared_out_w",
+        value=2000, key="shared_out_w",
     )
     out_h = st.select_slider(
-        "Height (px)", [300, 400, 600, 800, 1000, 1200, 1600, 2000, 3000],
-        value=defaults["output_height"], key="shared_out_h",
+        "Height (px)", [300, 400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
+        value=2000, key="shared_out_h",
     )
 
     st.divider()
