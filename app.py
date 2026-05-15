@@ -316,16 +316,6 @@ with st.container(height=500, border=False):
             help="How strongly lines are pulled toward the wave curve.",
             key="w_grav",
         )
-        perp_strength = st.slider(
-            "Perpendicular strength", 0.0, 1.0, D["perp_strength"], step=0.05, format="%.2f",
-            help="How closely lines align to the wave's perpendicular. 0 = random, 1 = exact.",
-            key="w_perp",
-        )
-        angle_spread = st.slider(
-            "Angle spread", 0.0, 1.5, D["angle_spread"], step=0.05, format="%.2f",
-            help="Angular jitter around the perpendicular direction (radians).",
-            key="w_spread",
-        )
 
         st.subheader("Stroke")
         sw_min, sw_max = st.slider(
@@ -434,8 +424,6 @@ elif gen_type == "Wave":
         "wave_phase": float(wave_phase),
         "wave_angle": float(wave_angle),
         "wave_gravity": float(wave_gravity),
-        "perp_strength": float(perp_strength),
-        "angle_spread": float(angle_spread),
         "length_median": float(length_median), "length_spread": float(length_spread),
         "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
         "stroke_width_min": sw_min, "stroke_width_max": sw_max,
