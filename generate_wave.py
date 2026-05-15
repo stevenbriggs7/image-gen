@@ -1,15 +1,13 @@
 """
-Generative wave lines: strokes oriented perpendicular to an invisible sine wave.
+Generative wave lines: strokes scattered across the canvas, all pointing in the
+same fixed direction — perpendicular to the wave's travel direction.
 
 Mathematical principles:
   - A sine wave runs across the canvas at a configurable angle.
-  - Lines are scattered across the canvas and oriented perpendicular to the
-    wave's local tangent at their position, so the wave acts as a direction field.
+  - All lines are oriented perpendicular to the wave's travel direction (fixed angle).
   - Wave gravity pulls mark positions toward the wave curve itself, creating
     natural density clustering along the wave.
-  - Perpendicular strength blends between random orientation and true
-    perpendicular, so distant marks can drift while nearby marks align tightly.
-  - Angular spread adds noise around the perpendicular for organic variation.
+  - The wave shapes WHERE lines are placed; it does not affect their angle.
 """
 
 import math
@@ -30,9 +28,6 @@ DEFAULTS: dict = {
     "wave_angle": 0.0,        # degrees; 0 = horizontal wave, 90 = vertical
     # Wave influence on line placement
     "wave_gravity": 0.4,      # 0 = uniform scatter, 1 = all lines on the wave
-    # Wave influence on line orientation
-    "perp_strength": 0.75,    # 0 = random angles, 1 = perfectly perpendicular
-    "angle_spread": 0.4,      # std-dev radians of jitter around perpendicular
     # Line style
     "length_median": 45.0,
     "length_spread": 0.6,
@@ -68,8 +63,6 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     wave_phase      = float(cfg["wave_phase"]) * 2.0 * math.pi
     theta           = math.radians(float(cfg["wave_angle"]))
     wave_gravity    = float(cfg["wave_gravity"])
-    perp_strength   = float(cfg["perp_strength"])
-    angle_spread    = float(cfg["angle_spread"])
     l_median        = float(cfg["length_median"]) * scale
     l_spread        = float(cfg["length_spread"])
     margin          = float(cfg["margin"])
@@ -132,17 +125,11 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     xs = cx + u * cos_t - v_new * sin_t
     ys = cy + u * sin_t + v_new * cos_t
 
-    # ── 6. Perpendicular angle in canvas space ────────────────────────────────
-    # Lines point perpendicular to the wave's travel direction (not the local slope).
-    # For wave_angle=0° (horizontal), lines are vertical (π/2). Scalar, not per-point.
-    perp_angle = theta + math.pi / 2
+    # ── 6. Line angle: fixed perpendicular to the wave's travel direction ────────
+    # For wave_angle=0° (horizontal wave), all lines are vertical (π/2).
+    angles = np.full(n_lines, theta + math.pi / 2)
 
-    # ── 7. Blend with random angles and add spread ────────────────────────────
-    rand_angles = rng.uniform(0.0, 2.0 * math.pi, n_lines)
-    angles      = perp_angle + (rand_angles - perp_angle) * (1.0 - perp_strength)
-    angles     += rng.normal(0.0, angle_spread, n_lines)
-
-    # ── 8. Log-normal length distribution ────────────────────────────────────
+    # ── 7. Log-normal length distribution ────────────────────────────────────
     log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)
     lengths     = np.clip(np.exp(log_lengths), 3.0 * scale, max(width, height) * 1.5)
 
