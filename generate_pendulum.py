@@ -32,7 +32,7 @@ DEFAULTS: dict = {
     "phase": 0.25,       # initial phase offset (0–1 → 0–2π); 0.25 = circular start
     "amplitude": 0.88,   # initial swing as fraction of min(width, height)/2
     "damping": 0.0003,   # amplitude decay rate — tighter spiral at higher values
-    "n_steps": 60000,    # simulation steps (more = more loops before centre)
+    "n_steps": 5000,     # simulation steps (more = more loops before centre)
     # Paint
     "flow_rate": 0.7,    # opacity fade rate (0=constant ink, 2=fast fade)
     "stroke_width": 2.0,

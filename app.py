@@ -374,7 +374,7 @@ with st.container(height=500, border=False):
             key="p_damp",
         )
         n_steps = st.slider(
-            "Steps", 10000, 100000, D["n_steps"], step=5000,
+            "Steps", 1, 10000, min(D["n_steps"], 10000), step=100,
             help="Simulation length — more steps draw more loops of the pattern.",
             key="p_steps",
         )
