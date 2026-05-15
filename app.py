@@ -19,6 +19,7 @@ import generate_shapes as gen_shapes
 import generate_attractor as gen_attractor
 import generate_streamlines as gen_streamlines
 import generate_voronoi as gen_voronoi
+import generate_spirograph as gen_spirograph
 
 
 # ── Mood colour system ─────────────────────────────────────────────────────────
@@ -161,7 +162,7 @@ with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
-        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines", "Voronoi"],
+        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines", "Voronoi", "Spirograph"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -169,14 +170,15 @@ with st.container(height=500, border=False):
     st.divider()
 
     # Seed (shared)
-    defaults = (gen_lines.DEFAULTS        if gen_type == "Lines"
-                else gen_circles.DEFAULTS     if gen_type == "Circles"
-                else gen_wave.DEFAULTS        if gen_type == "Wave"
-                else gen_pendulum.DEFAULTS    if gen_type == "Pendulum"
-                else gen_shapes.DEFAULTS      if gen_type == "Shapes"
-                else gen_attractor.DEFAULTS   if gen_type == "Attractor"
-                else gen_streamlines.DEFAULTS if gen_type == "Streamlines"
-                else gen_voronoi.DEFAULTS)
+    defaults = (gen_lines.DEFAULTS          if gen_type == "Lines"
+                else gen_circles.DEFAULTS       if gen_type == "Circles"
+                else gen_wave.DEFAULTS          if gen_type == "Wave"
+                else gen_pendulum.DEFAULTS      if gen_type == "Pendulum"
+                else gen_shapes.DEFAULTS        if gen_type == "Shapes"
+                else gen_attractor.DEFAULTS     if gen_type == "Attractor"
+                else gen_streamlines.DEFAULTS   if gen_type == "Streamlines"
+                else gen_voronoi.DEFAULTS       if gen_type == "Voronoi"
+                else gen_spirograph.DEFAULTS)
     col_btn, col_val = st.columns([2, 3])
     with col_btn:
         if st.button("Randomize", use_container_width=True):
@@ -555,6 +557,41 @@ with st.container(height=500, border=False):
             key="vo_alpha",
         )
 
+    elif gen_type == "Spirograph":
+        D = gen_spirograph.DEFAULTS
+
+        st.subheader("Gears")
+        spiro_mode = st.selectbox(
+            "Type", ["Hypo (inner rolling)", "Epi (outer rolling)"],
+            index=0 if D["mode"] == "hypo" else 1,
+            key="sp_mode",
+        )
+        R_val = st.slider("Outer radius R", 2, 20, int(D["R"]), step=1,
+                          help="Fixed gear radius. Number of petals ≈ R / gcd(R, r).",
+                          key="sp_R")
+        r_val = st.slider("Inner radius r", 1, 15, int(D["r"]), step=1,
+                          help="Rolling gear radius. Curve closes after r / gcd(R, r) loops.",
+                          key="sp_r")
+        d_val = st.slider(
+            "Pen distance d", 0.5, 20.0, float(D["d"]), step=0.5, format="%.1f",
+            help="Distance of pen from rolling gear center. d = r gives a classic hypocycloid.",
+            key="sp_d",
+        )
+
+        st.subheader("Trace")
+        n_repeats = st.slider(
+            "Repeats", 1, 5, D["n_repeats"], step=1,
+            help="Retrace the closed pattern this many times for a layered, denser look.",
+            key="sp_repeats",
+        )
+
+        st.subheader("Stroke")
+        stroke_width = st.slider("Width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="sp_sw")
+        sp_alpha_max = st.slider("Opacity start (0-255)", 0, 255, D["alpha_max"],
+                                 help="Opacity at the start of the trace.", key="sp_alpha_max")
+        sp_alpha_min = st.slider("Opacity end (0-255)", 0, 255, D["alpha_min"],
+                                 help="Opacity at the end of the trace.", key="sp_alpha_min")
+
     # ── Composition (shared) ──────────────────────────────────────────────────
     st.subheader("Composition")
     margin = st.slider(
@@ -727,6 +764,19 @@ elif gen_type == "Voronoi":
         "bg_hex": bg_hex, "fg_hex": fg_hex,
     }
     label = "voronoi"
+elif gen_type == "Spirograph":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "R": int(R_val), "r": int(r_val), "d": float(d_val),
+        "mode": "hypo" if spiro_mode.startswith("Hypo") else "epi",
+        "n_repeats": int(n_repeats),
+        "stroke_width": float(stroke_width),
+        "alpha_max": int(sp_alpha_max), "alpha_min": int(sp_alpha_min),
+        "margin": float(margin), "gravity": 0.0, "gravity_falloff": 0.0,
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+    }
+    label = "spirograph"
 else:
     config = {
         "seed": int(seed),
@@ -755,6 +805,7 @@ def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
           else gen_shapes.generate        if gen_type == "Shapes"
           else gen_streamlines.generate   if gen_type == "Streamlines"
           else gen_voronoi.generate       if gen_type == "Voronoi"
+          else gen_spirograph.generate    if gen_type == "Spirograph"
           else gen_attractor.generate)
     img = fn(cfg, scale=scale)
     buf = io.BytesIO()

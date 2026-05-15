@@ -9,8 +9,8 @@
 - Attractor (strange attractor)
 - Streamlines (long continuous curves tracing noise flow field)
 - Voronoi (nearest-neighbour cells — mosaic / stained-glass / cracked-earth)
+- Spirograph (hypotrochoid / epitrochoid — geometric flower and star patterns)
 
 ## Candidate ideas
 
-### Spirograph
-Parametric curves from a point on a circle rolling inside or outside another circle (hypotrochoid / epitrochoid). Like the classic toy — produces precise geometric flower and star patterns. Natural companion to the Pendulum generator. Pure maths, very fast to compute.
+(backlog empty — add more ideas here)
