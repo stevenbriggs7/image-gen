@@ -1,13 +1,16 @@
 """
-Generative wave lines: strokes scattered across the canvas, all pointing in the
-same fixed direction — perpendicular to the wave's travel direction.
+Generative wave lines: parallel lines whose centres ride a sine wave.
+
+Think of a comb of vertical lines whose spine bends into a wave — the wave
+determines where each line's centre sits, not the angle of the lines themselves.
 
 Mathematical principles:
-  - A sine wave runs across the canvas at a configurable angle.
-  - All lines are oriented perpendicular to the wave's travel direction (fixed angle).
-  - Wave gravity pulls mark positions toward the wave curve itself, creating
-    natural density clustering along the wave.
-  - The wave shapes WHERE lines are placed; it does not affect their angle.
+  - Line centres are placed directly ON the wave curve (u sampled along the
+    wave axis, v set to wave_v = A·sin(...)).
+  - All lines point in the same fixed direction — perpendicular to the wave's
+    travel direction (vertical for a horizontal wave, etc.).
+  - `line_scatter` adds optional Gaussian spread of centres off the wave,
+    softening the mechanical comb look without changing the average position.
 """
 
 import math
@@ -26,8 +29,8 @@ DEFAULTS: dict = {
     "wave_frequency": 2.0,    # complete cycles across canvas width
     "wave_phase": 0.0,        # 0–1, maps to 0–2π phase offset
     "wave_angle": 0.0,        # degrees; 0 = horizontal wave, 90 = vertical
-    # Wave influence on line placement
-    "wave_gravity": 0.4,      # 0 = uniform scatter, 1 = all lines on the wave
+    # Line placement
+    "line_scatter": 0.0,      # spread of centres off the wave (fraction of canvas height)
     # Line style
     "length_median": 45.0,
     "length_spread": 0.6,
@@ -47,10 +50,9 @@ DEFAULTS: dict = {
 
 def generate(config: dict, scale: float = 1.0) -> Image.Image:
     """
-    Render wave-guided lines and return a PIL Image.
+    Render wave-spine lines and return a PIL Image.
 
-    scale < 1.0 produces a proportionally smaller image (useful for previews)
-    while preserving the spatial character of the wave.
+    scale < 1.0 produces a proportionally smaller image (useful for previews).
     """
     cfg = {**DEFAULTS, **config}
 
@@ -58,11 +60,11 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     width           = max(10, int(cfg["output_width"]  * scale))
     height          = max(10, int(cfg["output_height"] * scale))
     n_lines         = int(cfg["n_lines"])
-    wave_amp        = float(cfg["wave_amplitude"]) * height   # px at current scale
+    wave_amp        = float(cfg["wave_amplitude"]) * height
     wave_freq       = float(cfg["wave_frequency"])
     wave_phase      = float(cfg["wave_phase"]) * 2.0 * math.pi
     theta           = math.radians(float(cfg["wave_angle"]))
-    wave_gravity    = float(cfg["wave_gravity"])
+    line_scatter    = float(cfg["line_scatter"]) * height
     l_median        = float(cfg["length_median"]) * scale
     l_spread        = float(cfg["length_spread"])
     margin          = float(cfg["margin"])
@@ -79,19 +81,33 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
 
     rng  = np.random.default_rng(seed)
     span = float(width)   # frequency is "cycles per canvas width"
+    cx, cy = width * 0.5, height * 0.5
+    cos_t  = math.cos(theta)
+    sin_t  = math.sin(theta)
 
-    # ── 1. Sample positions within margin ────────────────────────────────────
-    x_min, x_max = width  * margin, width  * (1.0 - margin)
-    y_min, y_max = height * margin, height * (1.0 - margin)
-    xs = rng.uniform(x_min, x_max, n_lines)
-    ys = rng.uniform(y_min, y_max, n_lines)
+    # ── 1. Sample u positions along the wave axis ─────────────────────────────
+    # u is the coordinate along the wave's travel direction (like x for a
+    # horizontal wave). Centres are spread uniformly across the canvas.
+    u_half = width * (0.5 - margin)
+    us = rng.uniform(-u_half, u_half, n_lines)
 
-    # ── 2. Canvas-centre gravity (shared with other generators) ───────────────
+    # ── 2. Place centres on the wave curve ───────────────────────────────────
+    phase_arg = 2.0 * math.pi * wave_freq * us / span + wave_phase
+    wave_vs   = wave_amp * np.sin(phase_arg)
+
+    # Optional scatter: spread centres off the wave perpendicular to travel
+    if line_scatter > 0.0:
+        wave_vs = wave_vs + rng.normal(0.0, line_scatter, n_lines)
+
+    # ── 3. Back-transform to canvas coordinates ───────────────────────────────
+    xs = cx + us * cos_t - wave_vs * sin_t
+    ys = cy + us * sin_t + wave_vs * cos_t
+
+    # ── 4. Optional canvas-centre gravity (shared with other generators) ───────
     if gravity > 0.0:
-        cx0, cy0 = (x_min + x_max) * 0.5, (y_min + y_max) * 0.5
-        dx, dy = cx0 - xs, cy0 - ys
+        dx, dy = cx - xs, cy - ys
         if gravity_falloff > 0.0:
-            canvas_r = 0.5 * math.sqrt((x_max - x_min) ** 2 + (y_max - y_min) ** 2)
+            canvas_r = 0.5 * math.sqrt(width ** 2 + height ** 2)
             d = np.sqrt(dx ** 2 + dy ** 2)
             weight = np.exp(-gravity_falloff * 5.0 * d / (canvas_r + 1e-9))
         else:
@@ -100,44 +116,18 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
         xs = xs + dx * eff * weight
         ys = ys + dy * eff * weight
 
-    # ── 3. Transform to wave-aligned coordinates ──────────────────────────────
-    cx, cy = width * 0.5, height * 0.5
-    cos_t  = math.cos(theta)
-    sin_t  = math.sin(theta)
-
-    dx_c = xs - cx
-    dy_c = ys - cy
-    u = dx_c * cos_t + dy_c * sin_t    # along-wave axis
-    v = -dx_c * sin_t + dy_c * cos_t  # across-wave axis
-
-    # ── 4. Wave position and signed distance ──────────────────────────────────
-    phase_arg = 2.0 * math.pi * wave_freq * u / span + wave_phase
-    wave_v    = wave_amp * np.sin(phase_arg)
-    dist      = v - wave_v
-
-    # ── 5. Wave gravity: pull positions toward the wave curve ─────────────────
-    if wave_gravity > 0.0:
-        v_new = v - dist * math.sqrt(wave_gravity)
-    else:
-        v_new = v
-
-    # Convert back to canvas coordinates
-    xs = cx + u * cos_t - v_new * sin_t
-    ys = cy + u * sin_t + v_new * cos_t
-
-    # ── 6. Line angle: fixed perpendicular to the wave's travel direction ────────
-    # For wave_angle=0° (horizontal wave), all lines are vertical (π/2).
+    # ── 5. All lines perpendicular to the wave's travel direction ─────────────
     angles = np.full(n_lines, theta + math.pi / 2)
 
-    # ── 7. Log-normal length distribution ────────────────────────────────────
+    # ── 6. Log-normal length distribution ─────────────────────────────────────
     log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)
     lengths     = np.clip(np.exp(log_lengths), 3.0 * scale, max(width, height) * 1.5)
 
-    # ── 9. Stroke widths and alphas ───────────────────────────────────────────
+    # ── 7. Stroke widths and alphas ───────────────────────────────────────────
     widths = rng.uniform(sw_min, sw_max, n_lines)
     alphas = rng.integers(a_min, a_max, n_lines)
 
-    # ── 10. Vectorised endpoint computation ───────────────────────────────────
+    # ── 8. Vectorised endpoint computation ────────────────────────────────────
     halves = lengths * 0.5
     cos_a  = np.cos(angles)
     sin_a  = np.sin(angles)
@@ -146,7 +136,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     x1s = xs + cos_a * halves
     y1s = ys + sin_a * halves
 
-    # ── 11. Draw ──────────────────────────────────────────────────────────────
+    # ── 9. Draw ───────────────────────────────────────────────────────────────
     img = Image.new("RGB", (width, height), bg)
 
     if invert_overlap:
