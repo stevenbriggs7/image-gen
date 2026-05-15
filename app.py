@@ -13,6 +13,7 @@ from PIL import Image
 
 import generate as gen_lines
 import generate_circles as gen_circles
+import generate_wave as gen_wave
 
 
 # ── Mood colour system ─────────────────────────────────────────────────────────
@@ -155,7 +156,7 @@ with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
-        "Type", ["Lines", "Circles"],
+        "Type", ["Lines", "Circles", "Wave"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -163,7 +164,9 @@ with st.container(height=500, border=False):
     st.divider()
 
     # Seed (shared)
-    defaults = gen_lines.DEFAULTS if gen_type == "Lines" else gen_circles.DEFAULTS
+    defaults = (gen_lines.DEFAULTS if gen_type == "Lines"
+                else gen_circles.DEFAULTS if gen_type == "Circles"
+                else gen_wave.DEFAULTS)
     col_btn, col_val = st.columns([2, 3])
     with col_btn:
         if st.button("Randomize", use_container_width=True):
@@ -225,7 +228,7 @@ with st.container(height=500, border=False):
         )
 
     # ── Circles controls ──────────────────────────────────────────────────────
-    else:
+    elif gen_type == "Circles":
         D = gen_circles.DEFAULTS
 
         st.subheader("Circles")
@@ -272,6 +275,75 @@ with st.container(height=500, border=False):
             key="c_invert",
         )
         flow_steps = 1  # not applicable to circles
+
+    # ── Wave controls ─────────────────────────────────────────────────────────
+    elif gen_type == "Wave":
+        D = gen_wave.DEFAULTS
+
+        st.subheader("Wave Lines")
+        n_lines       = st.slider("Count", 50, 3000, D["n_lines"], step=50, key="w_count")
+        length_median = st.slider("Length median (px)", 5, 300, int(D["length_median"]), key="w_len_med")
+        length_spread = st.slider(
+            "Length variation", 0.1, 2.0, D["length_spread"], step=0.05, format="%.2f",
+            key="w_len_spread",
+        )
+
+        st.subheader("Wave Shape")
+        wave_amplitude = st.slider(
+            "Amplitude", 0.0, 0.5, D["wave_amplitude"], step=0.01, format="%.2f",
+            help="Height of the wave as a fraction of canvas height.",
+            key="w_amp",
+        )
+        wave_frequency = st.slider(
+            "Frequency", 0.25, 8.0, D["wave_frequency"], step=0.25, format="%.2f",
+            help="Number of complete cycles across the canvas width.",
+            key="w_freq",
+        )
+        wave_phase = st.slider(
+            "Phase", 0.0, 1.0, D["wave_phase"], step=0.05, format="%.2f",
+            help="Shifts the wave left or right (0–1 wraps once around).",
+            key="w_phase",
+        )
+        wave_angle = st.slider(
+            "Wave angle (°)", 0, 180, int(D["wave_angle"]), step=5,
+            help="Direction the wave travels. 0° = horizontal, 90° = vertical.",
+            key="w_angle",
+        )
+
+        st.subheader("Wave Influence")
+        wave_gravity = st.slider(
+            "Wave gravity", 0.0, 1.0, D["wave_gravity"], step=0.05, format="%.2f",
+            help="How strongly lines are pulled toward the wave curve.",
+            key="w_grav",
+        )
+        perp_strength = st.slider(
+            "Perpendicular strength", 0.0, 1.0, D["perp_strength"], step=0.05, format="%.2f",
+            help="How closely lines align to the wave's perpendicular. 0 = random, 1 = exact.",
+            key="w_perp",
+        )
+        angle_spread = st.slider(
+            "Angle spread", 0.0, 1.5, D["angle_spread"], step=0.05, format="%.2f",
+            help="Angular jitter around the perpendicular direction (radians).",
+            key="w_spread",
+        )
+
+        st.subheader("Stroke")
+        sw_min, sw_max = st.slider(
+            "Width range (px)", 0.5, 8.0,
+            (D["stroke_width_min"], D["stroke_width_max"]),
+            step=0.5, key="w_sw",
+        )
+        alpha_min, alpha_max = st.slider(
+            "Opacity range (0-255)", 0, 255,
+            (D["alpha_min"], D["alpha_max"]),
+            key="w_alpha",
+        )
+        invert_overlap = st.toggle(
+            "Invert overlap", value=D["invert_overlap"],
+            help="Each line inverts the tone beneath it.",
+            key="w_invert",
+        )
+        flow_steps = 1  # not applicable
 
     # ── Composition (shared) ──────────────────────────────────────────────────
     st.subheader("Composition")
@@ -352,6 +424,26 @@ if gen_type == "Lines":
         "invert_overlap": invert_overlap,
     }
     label = "lines"
+elif gen_type == "Wave":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "n_lines": n_lines,
+        "wave_amplitude": float(wave_amplitude),
+        "wave_frequency": float(wave_frequency),
+        "wave_phase": float(wave_phase),
+        "wave_angle": float(wave_angle),
+        "wave_gravity": float(wave_gravity),
+        "perp_strength": float(perp_strength),
+        "angle_spread": float(angle_spread),
+        "length_median": float(length_median), "length_spread": float(length_spread),
+        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+        "stroke_width_min": sw_min, "stroke_width_max": sw_max,
+        "alpha_min": alpha_min, "alpha_max": alpha_max,
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+        "invert_overlap": invert_overlap,
+    }
+    label = "wave"
 else:
     config = {
         "seed": int(seed),
@@ -373,7 +465,9 @@ else:
 @st.cache_data(max_entries=40, show_spinner=False)
 def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
     cfg = dict(zip(cfg_key[::2], cfg_key[1::2]))
-    fn = gen_lines.generate if gen_type == "Lines" else gen_circles.generate
+    fn = (gen_lines.generate if gen_type == "Lines"
+          else gen_circles.generate if gen_type == "Circles"
+          else gen_wave.generate)
     img = fn(cfg, scale=scale)
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=False)
