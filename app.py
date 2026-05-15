@@ -138,6 +138,8 @@ header[data-testid="stHeader"] { display: none; }
 """, unsafe_allow_html=True)
 
 # Colour seed session state — randomised on first load and on mood change
+if "art_seed" not in st.session_state:
+    st.session_state.art_seed = 42
 if "colour_seed" not in st.session_state:
     st.session_state.colour_seed = 0
 if "prev_mood" not in st.session_state:
@@ -162,15 +164,15 @@ with st.container(height=500, border=False):
 
     # Seed (shared)
     defaults = gen_lines.DEFAULTS if gen_type == "Lines" else gen_circles.DEFAULTS
-    col_seed, col_btn = st.columns([5, 1])
-    with col_seed:
-        seed = st.number_input("Seed", min_value=0, max_value=99999,
-                               value=defaults["seed"], step=1)
+    col_btn, col_val = st.columns([2, 3])
     with col_btn:
-        st.write("")
-        if st.button("Randomize", help="Randomize seed", use_container_width=True):
-            seed = random.randint(0, 99999)
+        if st.button("Randomize", use_container_width=True):
+            st.session_state.art_seed = random.randint(0, 99999)
             st.rerun()
+    with col_val:
+        st.write("")
+        st.caption(f"seed {st.session_state.art_seed}")
+    seed = st.session_state.art_seed
 
     # ── Lines controls ────────────────────────────────────────────────────────
     if gen_type == "Lines":
