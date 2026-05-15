@@ -20,6 +20,7 @@ import generate_attractor as gen_attractor
 import generate_streamlines as gen_streamlines
 import generate_voronoi as gen_voronoi
 import generate_cubes as gen_cubes
+import generate_cubes_grid as gen_cubes_grid
 import generate_spirograph as gen_spirograph
 
 
@@ -166,7 +167,7 @@ with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
-        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines", "Voronoi", "Cubes", "Spirograph"],
+        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines", "Voronoi", "Cubes", "Grid", "Spirograph"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -183,9 +184,10 @@ with st.container(height=500, border=False):
                 else gen_streamlines.DEFAULTS   if gen_type == "Streamlines"
                 else gen_voronoi.DEFAULTS       if gen_type == "Voronoi"
                 else gen_cubes.DEFAULTS         if gen_type == "Cubes"
+                else gen_cubes_grid.DEFAULTS    if gen_type == "Grid"
                 else gen_spirograph.DEFAULTS)
     # Seed — shown only for generators with random variation
-    _SEED_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi", "Cubes"}
+    _SEED_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi", "Cubes", "Grid"}
     seed = st.session_state.art_seed
     if gen_type in _SEED_TYPES:
         col_btn, col_val = st.columns([2, 3])
@@ -625,6 +627,77 @@ with st.container(height=500, border=False):
             warp_amplitude = 0.0
             warp_scale = D["warp_scale"]
 
+    elif gen_type == "Grid":
+        D = gen_cubes_grid.DEFAULTS
+
+        st.subheader("Grid")
+        cube_size = st.slider(
+            "Cube size (px)", 10, 120, int(D["cube_size"]), step=5,
+            help="Height of one cube in pixels. Smaller = more cubes, denser grid.",
+            key="gr_cube_size",
+        )
+        max_height = st.slider(
+            "Max height", 1, 12, int(D["max_height"]), step=1,
+            help="Maximum number of cubes stacked per column.",
+            key="gr_max_h",
+        )
+        if max_height > 1:
+            height_style = st.selectbox(
+                "Height style", ["Flat", "Terrain", "Towers", "Wave"],
+                index=["flat", "terrain", "towers", "wave"].index(D["height_style"]),
+                help="How column heights are assigned across the grid.",
+                key="gr_h_style",
+            ).lower()
+            if height_style == "terrain":
+                height_noise_scale = st.slider(
+                    "Terrain scale", 0.001, 0.02, D["height_noise_scale"],
+                    step=0.001, format="%.3f",
+                    help="Spatial scale of the fractal terrain. Low = broad hills, high = rugged.",
+                    key="gr_h_ns",
+                )
+            elif height_style == "wave":
+                height_noise_scale = st.slider(
+                    "Wave frequency", 0.001, 0.02, D["height_noise_scale"],
+                    step=0.001, format="%.3f",
+                    help="Spatial frequency of the sinusoidal ripple.",
+                    key="gr_h_ns",
+                )
+            else:
+                height_noise_scale = D["height_noise_scale"]
+        else:
+            height_style = "flat"
+            height_noise_scale = D["height_noise_scale"]
+
+        st.subheader("Noise")
+        gr_noise_scale = st.slider(
+            "Tone noise scale", 0.001, 0.02, D["noise_scale"],
+            step=0.001, format="%.3f",
+            help="Spatial scale of the per-cube tone variation field.",
+            key="gr_noise_scale",
+        )
+        gr_noise_influence = st.slider(
+            "Tone noise influence", 0.0, 1.0, D["noise_influence"],
+            step=0.05, format="%.2f",
+            help="How strongly the field modulates cube brightness. 0 = uniform.",
+            key="gr_noise_inf",
+        )
+
+        st.subheader("Style")
+        gr_filled = st.toggle("Filled", value=D["filled"], key="gr_filled")
+        gr_stroke_w = st.slider(
+            "Outline width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="gr_stroke",
+        )
+        gr_alpha_min, gr_alpha_max = st.slider(
+            "Opacity range (0-255)", 0, 255,
+            (D["alpha_min"], D["alpha_max"]),
+            key="gr_alpha",
+        )
+        gr_shade_contrast = st.slider(
+            "Shade contrast", 0.0, 1.0, D["shade_contrast"], step=0.05, format="%.2f",
+            help="How different the three face shades are. 0 = flat, 1 = strong light/shadow.",
+            key="gr_shade",
+        )
+
     elif gen_type == "Spirograph":
         D = gen_spirograph.DEFAULTS
 
@@ -881,6 +954,22 @@ elif gen_type == "Cubes":
         "bg_hex": bg_hex, "fg_hex": fg_hex,
     }
     label = "cubes"
+elif gen_type == "Grid":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "cube_size": int(cube_size),
+        "max_height": int(max_height),
+        "height_style": height_style,
+        "height_noise_scale": float(height_noise_scale),
+        "noise_scale": float(gr_noise_scale),
+        "noise_influence": float(gr_noise_influence),
+        "filled": gr_filled, "stroke_width": float(gr_stroke_w),
+        "alpha_min": int(gr_alpha_min), "alpha_max": int(gr_alpha_max),
+        "shade_contrast": float(gr_shade_contrast),
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+    }
+    label = "grid"
 elif gen_type == "Spirograph":
     config = {
         "seed": int(seed),
@@ -925,6 +1014,7 @@ def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
           else gen_streamlines.generate   if gen_type == "Streamlines"
           else gen_voronoi.generate       if gen_type == "Voronoi"
           else gen_cubes.generate         if gen_type == "Cubes"
+          else gen_cubes_grid.generate    if gen_type == "Grid"
           else gen_spirograph.generate    if gen_type == "Spirograph"
           else gen_attractor.generate)
     img = fn(cfg, scale=scale)
