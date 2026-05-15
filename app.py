@@ -316,6 +316,11 @@ with st.container(height=500, border=False):
             help="Spread line centres off the wave. 0 = all centres exactly on the wave.",
             key="w_scatter",
         )
+        angle_spread = st.slider(
+            "Angle variation", 0.0, 1.5, D["angle_spread"], step=0.05, format="%.2f",
+            help="Angular randomness around the perpendicular (radians). 0 = all lines parallel.",
+            key="w_angle_spread",
+        )
 
         st.subheader("Stroke")
         sw_min, sw_max = st.slider(
@@ -424,6 +429,7 @@ elif gen_type == "Wave":
         "wave_phase": float(wave_phase),
         "wave_angle": float(wave_angle),
         "line_scatter": float(line_scatter),
+        "angle_spread": float(angle_spread),
         "length_median": float(length_median), "length_spread": float(length_spread),
         "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
         "stroke_width_min": sw_min, "stroke_width_max": sw_max,
