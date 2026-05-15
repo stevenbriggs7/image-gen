@@ -592,6 +592,33 @@ with st.container(height=500, border=False):
         sp_alpha_min = st.slider("Opacity end (0-255)", 0, 255, D["alpha_min"],
                                  help="Opacity at the end of the trace.", key="sp_alpha_min")
 
+    # ── Stroke Character (shared, stroke-based generators only) ──────────────
+    _STROKE_TYPES = {"Lines", "Wave", "Streamlines", "Pendulum", "Spirograph"}
+    if gen_type in _STROKE_TYPES:
+        st.subheader("Stroke Character")
+        stroke_taper = st.slider(
+            "End taper", 0.0, 1.0, float(defaults.get("stroke_taper", 0.0)),
+            step=0.05, key="sc_taper",
+            help="Narrows stroke width at both ends of each stroke.",
+        )
+        stroke_width_var = st.slider(
+            "Width variation", 0.0, 1.0, float(defaults.get("stroke_width_var", 0.0)),
+            step=0.05, key="sc_wvar",
+            help="Random per-stroke width jitter for a hand-drawn rhythm.",
+        )
+        stroke_break_density = st.slider(
+            "Break density", 0.0, 0.5, float(defaults.get("stroke_break_density", 0.0)),
+            step=0.02, key="sc_break",
+            help="Fraction of strokes/segments randomly omitted (dry-brush gaps).",
+        )
+        stroke_roughness = st.slider(
+            "Roughness", 0.0, 2.0, float(defaults.get("stroke_roughness", 0.0)),
+            step=0.1, key="sc_rough",
+            help="Perpendicular wobble amplitude (× stroke width) for hand-tremor feel.",
+        )
+    else:
+        stroke_taper = stroke_width_var = stroke_break_density = stroke_roughness = 0.0
+
     # ── Composition (shared) ──────────────────────────────────────────────────
     st.subheader("Composition")
     margin = st.slider(
@@ -669,6 +696,8 @@ if gen_type == "Lines":
         "bg_hex": bg_hex, "fg_hex": fg_hex,
         "flow_steps": flow_steps,
         "invert_overlap": invert_overlap,
+        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
     }
     label = "lines"
 elif gen_type == "Wave":
@@ -688,6 +717,8 @@ elif gen_type == "Wave":
         "alpha_min": alpha_min, "alpha_max": alpha_max,
         "bg_hex": bg_hex, "fg_hex": fg_hex,
         "invert_overlap": invert_overlap,
+        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
     }
     label = "wave"
 elif gen_type == "Pendulum":
@@ -705,6 +736,8 @@ elif gen_type == "Pendulum":
         "alpha_max": int(p_alpha_max),
         "alpha_min": int(p_alpha_min),
         "bg_hex": bg_hex, "fg_hex": fg_hex,
+        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
     }
     label = "pendulum"
 elif gen_type == "Shapes":
@@ -748,6 +781,8 @@ elif gen_type == "Streamlines":
         "alpha_min": int(alpha_min),
         "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
         "bg_hex": bg_hex, "fg_hex": fg_hex,
+        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
     }
     label = "streamlines"
 elif gen_type == "Voronoi":
@@ -775,6 +810,8 @@ elif gen_type == "Spirograph":
         "alpha_max": int(sp_alpha_max), "alpha_min": int(sp_alpha_min),
         "margin": float(margin), "gravity": 0.0, "gravity_falloff": 0.0,
         "bg_hex": bg_hex, "fg_hex": fg_hex,
+        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
     }
     label = "spirograph"
 else:

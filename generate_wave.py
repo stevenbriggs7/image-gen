@@ -17,7 +17,7 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw
 
-from generate import _hex_to_rgb, _invert_segment
+from generate import _hex_to_rgb, _invert_segment, _roughen_path
 
 DEFAULTS: dict = {
     "seed": 42,
@@ -46,6 +46,10 @@ DEFAULTS: dict = {
     "bg_hex": "#f5f5f0",
     "fg_hex": "#141419",
     "invert_overlap": False,
+    "stroke_taper": 0.0,
+    "stroke_width_var": 0.0,
+    "stroke_break_density": 0.0,
+    "stroke_roughness": 0.0,
 }
 
 
@@ -77,6 +81,8 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     a_min           = int(cfg["alpha_min"])
     a_max           = max(a_min + 1, int(cfg["alpha_max"]))
     invert_overlap  = bool(cfg["invert_overlap"])
+    break_p  = float(cfg.get("stroke_break_density", 0.0))
+    roughness = float(cfg.get("stroke_roughness", 0.0))
 
     bg = _hex_to_rgb(str(cfg["bg_hex"]))
     fg = _hex_to_rgb(str(cfg["fg_hex"]))
@@ -160,10 +166,21 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
             color_lut[a] = tuple(int(bg[c] + (fg[c] - bg[c]) * t) for c in range(3))  # type: ignore[misc]
         draw = ImageDraw.Draw(img)
         for i in range(n_lines):
-            draw.line(
-                [(float(x0s[i]), float(y0s[i])), (float(x1s[i]), float(y1s[i]))],
-                fill=color_lut.get(int(alphas[i]), fg),
-                width=max(1, round(float(widths[i]))),
-            )
+            if break_p > 0.0 and rng.random() < break_p:
+                continue
+            x0, y0 = float(x0s[i]), float(y0s[i])
+            x1, y1 = float(x1s[i]), float(y1s[i])
+            w = max(1, round(float(widths[i])))
+            if roughness > 0.0:
+                dx, dy = x1 - x0, y1 - y0
+                ln = math.sqrt(dx * dx + dy * dy) + 1e-9
+                off = rng.normal(0.0, roughness * w)
+                line_pts: list = [(x0, y0),
+                                  ((x0 + x1) * 0.5 - (dy / ln) * off,
+                                   (y0 + y1) * 0.5 + (dx / ln) * off),
+                                  (x1, y1)]
+            else:
+                line_pts = [(x0, y0), (x1, y1)]
+            draw.line(line_pts, fill=color_lut.get(int(alphas[i]), fg), width=w)
 
     return img

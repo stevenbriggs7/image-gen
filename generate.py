@@ -35,12 +35,39 @@ DEFAULTS: dict = {
     "bg_hex": "#f5f5f0",
     "fg_hex": "#141419",
     "invert_overlap": False,
+    "stroke_taper": 0.0,
+    "stroke_width_var": 0.0,
+    "stroke_break_density": 0.0,
+    "stroke_roughness": 0.0,
 }
 
 
 def _hex_to_rgb(h: str) -> tuple[int, int, int]:
     h = h.lstrip("#")
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
+
+# ── Stroke character utilities ────────────────────────────────────────────────────────────────
+
+def _roughen_path(pts: np.ndarray, amplitude: float, rng) -> np.ndarray:
+    """Perpendicular Gaussian noise on each interior point. pts shape: (N, 2)."""
+    if amplitude <= 0.0 or len(pts) < 2:
+        return pts
+    tangents = np.diff(pts, axis=0)
+    norms = np.linalg.norm(tangents, axis=1, keepdims=True) + 1e-9
+    tangents /= norms
+    perps = np.column_stack([-tangents[:, 1], tangents[:, 0]])
+    pts = pts.copy()
+    pts[1:] += perps * rng.normal(0.0, amplitude, len(perps))[:, np.newaxis]
+    return pts
+
+
+def _taper_width(base_w: float, t: float, taper: float) -> int:
+    """Width at fractional position t ∈ [0,1] along a stroke."""
+    if taper <= 0.0:
+        return max(1, round(base_w))
+    factor = math.sin(math.pi * t) ** taper
+    return max(1, round(base_w * max(0.12, factor)))
 
 
 # ── Noise field ──────────────────────────────────────────────────────────────────────────────
@@ -145,6 +172,10 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     a_min           = int(cfg["alpha_min"])
     a_max           = max(a_min + 1, int(cfg["alpha_max"]))
     invert_overlap  = bool(cfg["invert_overlap"])
+    taper    = float(cfg.get("stroke_taper", 0.0))
+    width_var = float(cfg.get("stroke_width_var", 0.0))
+    break_p  = float(cfg.get("stroke_break_density", 0.0))
+    roughness = float(cfg.get("stroke_roughness", 0.0))
 
     bg = _hex_to_rgb(str(cfg["bg_hex"]))
     fg = _hex_to_rgb(str(cfg["fg_hex"]))
@@ -208,11 +239,25 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
                 color_lut[a] = tuple(int(bg[c] + (fg[c] - bg[c]) * t) for c in range(3))  # type: ignore[misc]
             draw = ImageDraw.Draw(img)
             for i in range(n_lines):
-                draw.line(
-                    [(float(x0s[i]), float(y0s[i])), (float(x1s[i]), float(y1s[i]))],
-                    fill=color_lut.get(int(alphas[i]), fg),
-                    width=max(1, round(float(widths[i]))),
-                )
+                if break_p > 0.0 and rng.random() < break_p:
+                    continue
+                x0, y0 = float(x0s[i]), float(y0s[i])
+                x1, y1 = float(x1s[i]), float(y1s[i])
+                base_w = float(widths[i])
+                if width_var > 0.0:
+                    base_w *= max(0.1, 1.0 + width_var * (rng.random() - 0.5) * 2.0)
+                w = _taper_width(base_w, 0.5, taper)
+                if roughness > 0.0:
+                    dx, dy = x1 - x0, y1 - y0
+                    ln = math.sqrt(dx * dx + dy * dy) + 1e-9
+                    off = rng.normal(0.0, roughness * w)
+                    line_pts: list = [(x0, y0),
+                                      ((x0 + x1) * 0.5 - (dy / ln) * off,
+                                       (y0 + y1) * 0.5 + (dx / ln) * off),
+                                      (x1, y1)]
+                else:
+                    line_pts = [(x0, y0), (x1, y1)]
+                draw.line(line_pts, fill=color_lut.get(int(alphas[i]), fg), width=w)
     else:
         # Flow curve: trace each stroke through the field step by step.
         # All strokes are advanced in parallel (vectorised per step) then drawn.
@@ -256,12 +301,17 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
                 color_lut[a] = tuple(int(bg[c] + (fg[c] - bg[c]) * t) for c in range(3))  # type: ignore[misc]
             draw = ImageDraw.Draw(img)
             for i in range(n_lines):
-                pts = [(float(all_pts[i, s, 0]), float(all_pts[i, s, 1]))
-                       for s in range(flow_steps + 1)]
-                draw.line(
-                    pts,
-                    fill=color_lut.get(int(alphas[i]), fg),
-                    width=max(1, round(float(widths[i]))),
-                )
+                if break_p > 0.0 and rng.random() < break_p:
+                    continue
+                base_w = float(widths[i])
+                if width_var > 0.0:
+                    base_w *= max(0.1, 1.0 + width_var * (rng.random() - 0.5) * 2.0)
+                w = _taper_width(base_w, 0.5, taper)
+                if roughness > 0.0:
+                    stroke_arr = _roughen_path(all_pts[i].astype(np.float64), roughness * w, rng)
+                    pts = [(float(stroke_arr[s, 0]), float(stroke_arr[s, 1])) for s in range(flow_steps + 1)]
+                else:
+                    pts = [(float(all_pts[i, s, 0]), float(all_pts[i, s, 1])) for s in range(flow_steps + 1)]
+                draw.line(pts, fill=color_lut.get(int(alphas[i]), fg), width=w)
 
     return img
