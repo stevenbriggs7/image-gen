@@ -31,6 +31,7 @@ DEFAULTS: dict = {
     "wave_angle": 0.0,        # degrees; 0 = horizontal wave, 90 = vertical
     # Line placement
     "line_scatter": 0.0,      # spread of centres off the wave (fraction of canvas height)
+    "angle_spread": 0.0,      # std-dev radians of jitter around the perpendicular
     # Line style
     "length_median": 45.0,
     "length_spread": 0.6,
@@ -65,6 +66,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     wave_phase      = float(cfg["wave_phase"]) * 2.0 * math.pi
     theta           = math.radians(float(cfg["wave_angle"]))
     line_scatter    = float(cfg["line_scatter"]) * height
+    angle_spread    = float(cfg["angle_spread"])
     l_median        = float(cfg["length_median"]) * scale
     l_spread        = float(cfg["length_spread"])
     margin          = float(cfg["margin"])
@@ -116,8 +118,10 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
         xs = xs + dx * eff * weight
         ys = ys + dy * eff * weight
 
-    # ── 5. All lines perpendicular to the wave's travel direction ─────────────
+    # ── 5. Line angles: perpendicular to wave travel, with optional jitter ───────
     angles = np.full(n_lines, theta + math.pi / 2)
+    if angle_spread > 0.0:
+        angles = angles + rng.normal(0.0, angle_spread, n_lines)
 
     # ── 6. Log-normal length distribution ─────────────────────────────────────
     log_lengths = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_lines)
