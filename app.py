@@ -16,6 +16,7 @@ import generate_circles as gen_circles
 import generate_wave as gen_wave
 import generate_pendulum as gen_pendulum
 import generate_shapes as gen_shapes
+import generate_attractor as gen_attractor
 
 
 # ── Mood colour system ─────────────────────────────────────────────────────────
@@ -158,7 +159,7 @@ with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
-        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes"],
+        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -166,11 +167,12 @@ with st.container(height=500, border=False):
     st.divider()
 
     # Seed (shared)
-    defaults = (gen_lines.DEFAULTS   if gen_type == "Lines"
-                else gen_circles.DEFAULTS  if gen_type == "Circles"
-                else gen_wave.DEFAULTS     if gen_type == "Wave"
-                else gen_pendulum.DEFAULTS if gen_type == "Pendulum"
-                else gen_shapes.DEFAULTS)
+    defaults = (gen_lines.DEFAULTS      if gen_type == "Lines"
+                else gen_circles.DEFAULTS   if gen_type == "Circles"
+                else gen_wave.DEFAULTS      if gen_type == "Wave"
+                else gen_pendulum.DEFAULTS  if gen_type == "Pendulum"
+                else gen_shapes.DEFAULTS    if gen_type == "Shapes"
+                else gen_attractor.DEFAULTS)
     col_btn, col_val = st.columns([2, 3])
     with col_btn:
         if st.button("Randomize", use_container_width=True):
@@ -452,6 +454,34 @@ with st.container(height=500, border=False):
             key="sh_invert",
         )
 
+    elif gen_type == "Attractor":
+        D = gen_attractor.DEFAULTS
+
+        st.subheader("Attractor")
+        attractor_type = st.selectbox(
+            "Type", ["Clifford", "De Jong"],
+            index=0 if D["attractor"] == "clifford" else 1,
+            key="at_type",
+        )
+        n_iter = st.slider(
+            "Iterations", 500_000, 8_000_000, D["n_iter"], step=500_000,
+            help="More iterations = denser, smoother pattern. Scales down automatically for previews.",
+            key="at_iter",
+        )
+
+        st.subheader("Parameters")
+        a = st.slider("a", -3.0, 3.0, D["a"], step=0.05, format="%.2f", key="at_a")
+        b = st.slider("b", -3.0, 3.0, D["b"], step=0.05, format="%.2f", key="at_b")
+        c = st.slider("c", -3.0, 3.0, D["c"], step=0.05, format="%.2f", key="at_c")
+        d = st.slider("d", -3.0, 3.0, D["d"], step=0.05, format="%.2f", key="at_d")
+
+        st.subheader("Tone")
+        gamma = st.slider(
+            "Gamma", 0.1, 2.0, D["gamma"], step=0.05, format="%.2f",
+            help="< 1 brightens midtones (dusty), > 1 darkens them (high-contrast).",
+            key="at_gamma",
+        )
+
     # ── Composition (shared) ──────────────────────────────────────────────────
     st.subheader("Composition")
     margin = st.slider(
@@ -582,6 +612,18 @@ elif gen_type == "Shapes":
         "invert_overlap": invert_overlap,
     }
     label = "shapes"
+elif gen_type == "Attractor":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "attractor": attractor_type.lower().replace(" ", ""),
+        "a": float(a), "b": float(b), "c": float(c), "d": float(d),
+        "n_iter": int(n_iter),
+        "gamma": float(gamma),
+        "margin": 0.0, "gravity": 0.0, "gravity_falloff": 0.0,
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+    }
+    label = "attractor"
 else:
     config = {
         "seed": int(seed),
@@ -603,11 +645,12 @@ else:
 @st.cache_data(max_entries=40, show_spinner=False)
 def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
     cfg = dict(zip(cfg_key[::2], cfg_key[1::2]))
-    fn = (gen_lines.generate    if gen_type == "Lines"
-          else gen_circles.generate  if gen_type == "Circles"
-          else gen_wave.generate     if gen_type == "Wave"
-          else gen_pendulum.generate if gen_type == "Pendulum"
-          else gen_shapes.generate)
+    fn = (gen_lines.generate       if gen_type == "Lines"
+          else gen_circles.generate   if gen_type == "Circles"
+          else gen_wave.generate      if gen_type == "Wave"
+          else gen_pendulum.generate  if gen_type == "Pendulum"
+          else gen_shapes.generate    if gen_type == "Shapes"
+          else gen_attractor.generate)
     img = fn(cfg, scale=scale)
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=False)
