@@ -697,6 +697,17 @@ with st.container(height=500, border=False):
             help="How different the three face shades are. 0 = flat, 1 = strong light/shadow.",
             key="gr_shade",
         )
+        gr_show_dots = st.toggle(
+            "Vertex dots", value=D["show_dots"],
+            help="Draw a small dot at each vertex junction.",
+            key="gr_show_dots",
+        )
+        if gr_show_dots:
+            gr_dot_radius = st.slider(
+                "Dot radius (px)", 0.5, 8.0, float(D["dot_radius"]), step=0.5, key="gr_dot_r",
+            )
+        else:
+            gr_dot_radius = float(D["dot_radius"])
 
     elif gen_type == "Spirograph":
         D = gen_spirograph.DEFAULTS
@@ -967,6 +978,7 @@ elif gen_type == "Grid":
         "filled": gr_filled, "stroke_width": float(gr_stroke_w),
         "alpha_min": int(gr_alpha_min), "alpha_max": int(gr_alpha_max),
         "shade_contrast": float(gr_shade_contrast),
+        "show_dots": gr_show_dots, "dot_radius": float(gr_dot_radius),
         "bg_hex": bg_hex, "fg_hex": fg_hex,
     }
     label = "grid"

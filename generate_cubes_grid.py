@@ -33,8 +33,10 @@ DEFAULTS: dict = {
     "shade_contrast": 0.75,      # 0 = all faces same tone; 1 = strong light/shadow
     "noise_scale": 0.006,        # spatial frequency of per-cube tone variation
     "noise_influence": 0.25,     # strength of tone variation
-    "filled": True,
+    "filled": False,
     "stroke_width": 1.0,
+    "show_dots": True,
+    "dot_radius": 2.5,
     "alpha_min": 140,
     "alpha_max": 220,
     "bg_hex": "#f5f5f0",
@@ -67,6 +69,8 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     noise_inf    = float(cfg["noise_influence"])
     filled       = bool(cfg["filled"])
     stroke_w     = max(1, round(float(cfg["stroke_width"])))
+    show_dots    = bool(cfg.get("show_dots", True))
+    dot_r        = max(1.0, float(cfg.get("dot_radius", 2.5)) * scale)
     a_min        = int(cfg["alpha_min"])
     a_max        = max(a_min + 1, int(cfg["alpha_max"]))
 
@@ -146,6 +150,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     # ── Draw — back-to-front, bottom-to-top ───────────────────────────────────
     img  = Image.new("RGB", (width, height), bg)
     draw = ImageDraw.Draw(img)
+    vert_set: set[tuple[int, int]] = set()
 
     for d in range(d_max + 1):
         cy_ground = cy0 + d * hs
@@ -198,5 +203,20 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
                     for pts, shade in faces:
                         draw.polygon(pts, fill=None,
                                      outline=face_color(alp, shade), width=stroke_w)
+
+                if show_dots:
+                    for vx, vy in (top, tl, tr, mid, bl, br, bot):
+                        ix, iy = round(vx), round(vy)
+                        if 0 <= ix < width and 0 <= iy < height:
+                            vert_set.add((ix, iy))
+
+    # ── Vertex dots (drawn last so they sit on top of all faces) ─────────────
+    if show_dots and vert_set:
+        dot_col = face_color(base_alpha, 1.0)
+        for ix, iy in vert_set:
+            draw.ellipse(
+                [ix - dot_r, iy - dot_r, ix + dot_r, iy + dot_r],
+                fill=dot_col,
+            )
 
     return img
