@@ -15,6 +15,7 @@ import generate as gen_lines
 import generate_circles as gen_circles
 import generate_wave as gen_wave
 import generate_pendulum as gen_pendulum
+import generate_shapes as gen_shapes
 
 
 # ── Mood colour system ─────────────────────────────────────────────────────────
@@ -157,7 +158,7 @@ with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
-        "Type", ["Lines", "Circles", "Wave", "Pendulum"],
+        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -166,9 +167,10 @@ with st.container(height=500, border=False):
 
     # Seed (shared)
     defaults = (gen_lines.DEFAULTS   if gen_type == "Lines"
-                else gen_circles.DEFAULTS if gen_type == "Circles"
-                else gen_wave.DEFAULTS    if gen_type == "Wave"
-                else gen_pendulum.DEFAULTS)
+                else gen_circles.DEFAULTS  if gen_type == "Circles"
+                else gen_wave.DEFAULTS     if gen_type == "Wave"
+                else gen_pendulum.DEFAULTS if gen_type == "Pendulum"
+                else gen_shapes.DEFAULTS)
     col_btn, col_val = st.columns([2, 3])
     with col_btn:
         if st.button("Randomize", use_container_width=True):
@@ -400,6 +402,56 @@ with st.container(height=500, border=False):
             key="p_alpha_min",
         )
 
+    elif gen_type == "Shapes":
+        D = gen_shapes.DEFAULTS
+
+        st.subheader("Shape mix")
+        n_circles   = st.slider("Circles",   0, 1000, D["n_circles"],   step=10, key="sh_circles")
+        n_triangles = st.slider("Triangles", 0, 1000, D["n_triangles"], step=10, key="sh_triangles")
+        n_squares   = st.slider("Squares",   0, 1000, D["n_squares"],   step=10, key="sh_squares")
+
+        st.subheader("Size")
+        size_median = st.slider(
+            "Size median (px)", 2, 200, int(D["size_median"]), key="sh_size_med",
+        )
+        size_spread = st.slider(
+            "Size variation", 0.1, 2.0, D["size_spread"], step=0.05, format="%.2f",
+            key="sh_size_spread",
+        )
+        rotation = st.slider(
+            "Rotation", 0.0, 1.0, D["rotation"], step=0.05, format="%.2f",
+            help="0 = all axis-aligned, 1 = fully random per-shape rotation.",
+            key="sh_rotation",
+        )
+
+        st.subheader("Noise")
+        noise_scale = st.slider(
+            "Noise scale", 0.001, 0.02, D["noise_scale"], step=0.001, format="%.3f",
+            help="Spatial frequency of the size-modulation field.",
+            key="sh_noise_scale",
+        )
+        noise_influence = st.slider(
+            "Noise influence", 0.0, 1.0, D["noise_influence"], step=0.05, format="%.2f",
+            help="How strongly noise modulates size. 0 = pure log-normal.",
+            key="sh_noise_inf",
+        )
+
+        st.subheader("Style")
+        filled = st.toggle("Filled", value=D["filled"], key="sh_filled")
+        stroke_w = st.slider(
+            "Stroke width (px)", 0.5, 8.0, D["stroke_width"], step=0.5, key="sh_stroke",
+        )
+        alpha_min, alpha_max = st.slider(
+            "Opacity range (0-255)", 0, 255,
+            (D["alpha_min"], D["alpha_max"]),
+            key="sh_alpha",
+        )
+        invert_overlap = st.toggle(
+            "Invert overlap", value=D["invert_overlap"],
+            help="Each shape inverts the tone beneath it.",
+            key="sh_invert",
+        )
+
     # ── Composition (shared) ──────────────────────────────────────────────────
     st.subheader("Composition")
     margin = st.slider(
@@ -515,6 +567,21 @@ elif gen_type == "Pendulum":
         "bg_hex": bg_hex, "fg_hex": fg_hex,
     }
     label = "pendulum"
+elif gen_type == "Shapes":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "n_circles": int(n_circles), "n_triangles": int(n_triangles), "n_squares": int(n_squares),
+        "size_median": float(size_median), "size_spread": float(size_spread),
+        "rotation": float(rotation),
+        "noise_scale": float(noise_scale), "noise_influence": float(noise_influence),
+        "filled": filled, "stroke_width": float(stroke_w),
+        "alpha_min": int(alpha_min), "alpha_max": int(alpha_max),
+        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+        "invert_overlap": invert_overlap,
+    }
+    label = "shapes"
 else:
     config = {
         "seed": int(seed),
@@ -539,7 +606,8 @@ def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
     fn = (gen_lines.generate    if gen_type == "Lines"
           else gen_circles.generate  if gen_type == "Circles"
           else gen_wave.generate     if gen_type == "Wave"
-          else gen_pendulum.generate)
+          else gen_pendulum.generate if gen_type == "Pendulum"
+          else gen_shapes.generate)
     img = fn(cfg, scale=scale)
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=False)
