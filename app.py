@@ -14,6 +14,7 @@ from PIL import Image
 import generate as gen_lines
 import generate_circles as gen_circles
 import generate_wave as gen_wave
+import generate_pendulum as gen_pendulum
 
 
 # ── Mood colour system ─────────────────────────────────────────────────────────
@@ -156,7 +157,7 @@ with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
-        "Type", ["Lines", "Circles", "Wave"],
+        "Type", ["Lines", "Circles", "Wave", "Pendulum"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -164,9 +165,10 @@ with st.container(height=500, border=False):
     st.divider()
 
     # Seed (shared)
-    defaults = (gen_lines.DEFAULTS if gen_type == "Lines"
+    defaults = (gen_lines.DEFAULTS   if gen_type == "Lines"
                 else gen_circles.DEFAULTS if gen_type == "Circles"
-                else gen_wave.DEFAULTS)
+                else gen_wave.DEFAULTS    if gen_type == "Wave"
+                else gen_pendulum.DEFAULTS)
     col_btn, col_val = st.columns([2, 3])
     with col_btn:
         if st.button("Randomize", use_container_width=True):
@@ -340,6 +342,64 @@ with st.container(height=500, border=False):
         )
         flow_steps = 1  # not applicable
 
+    elif gen_type == "Pendulum":
+        D = gen_pendulum.DEFAULTS
+
+        st.subheader("Pendulum")
+        freq_ratio = st.slider(
+            "Frequency ratio", 0.5, 3.0, D["freq_ratio"], step=0.05, format="%.2f",
+            help="Ratio of x to y oscillation. 1=ellipse, 2=figure-8, 1.5=trefoil-ish.",
+            key="p_ratio",
+        )
+        freq_delta = st.slider(
+            "Precession", 0.0, 0.02, D["freq_delta"], step=0.001, format="%.3f",
+            help="Tiny frequency difference that makes the pattern slowly rotate and fill in.",
+            key="p_delta",
+        )
+        phase = st.slider(
+            "Phase", 0.0, 1.0, D["phase"], step=0.05, format="%.2f",
+            help="Initial phase offset (0=diagonal line, 0.25=circle, other=ellipse).",
+            key="p_phase",
+        )
+        amplitude = st.slider(
+            "Amplitude", 0.3, 1.0, D["amplitude"], step=0.05, format="%.2f",
+            help="Initial swing size as a fraction of the canvas.",
+            key="p_amp",
+        )
+
+        st.subheader("Paint")
+        damping = st.slider(
+            "Damping", 0.0001, 0.002, D["damping"], step=0.0001, format="%.4f",
+            help="How quickly the swing decays — tighter spiral at higher values.",
+            key="p_damp",
+        )
+        n_steps = st.slider(
+            "Steps", 10000, 100000, D["n_steps"], step=5000,
+            help="Simulation length — more steps draw more loops of the pattern.",
+            key="p_steps",
+        )
+        flow_rate = st.slider(
+            "Flow rate", 0.0, 2.0, D["flow_rate"], step=0.1, format="%.1f",
+            help="How quickly opacity fades as the pot empties. 0=constant ink.",
+            key="p_flow",
+        )
+
+        st.subheader("Stroke")
+        stroke_width = st.slider(
+            "Width (px)", 0.5, 8.0, D["stroke_width"], step=0.5,
+            key="p_sw",
+        )
+        p_alpha_max = st.slider(
+            "Opacity start (0-255)", 0, 255, D["alpha_max"],
+            help="Opacity at the beginning of the trace.",
+            key="p_alpha_max",
+        )
+        p_alpha_min = st.slider(
+            "Opacity end (0-255)", 0, 255, D["alpha_min"],
+            help="Opacity at the end of the trace (pot nearly empty).",
+            key="p_alpha_min",
+        )
+
     # ── Composition (shared) ──────────────────────────────────────────────────
     st.subheader("Composition")
     margin = st.slider(
@@ -438,6 +498,24 @@ elif gen_type == "Wave":
         "invert_overlap": invert_overlap,
     }
     label = "wave"
+elif gen_type == "Pendulum":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "freq_ratio": float(freq_ratio),
+        "freq_delta": float(freq_delta),
+        "phase": float(phase),
+        "damping": float(damping),
+        "n_steps": int(n_steps),
+        "time_scale": 1.0,
+        "amplitude": float(amplitude),
+        "flow_rate": float(flow_rate),
+        "stroke_width": float(stroke_width),
+        "alpha_max": int(p_alpha_max),
+        "alpha_min": int(p_alpha_min),
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+    }
+    label = "pendulum"
 else:
     config = {
         "seed": int(seed),
@@ -459,9 +537,10 @@ else:
 @st.cache_data(max_entries=40, show_spinner=False)
 def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
     cfg = dict(zip(cfg_key[::2], cfg_key[1::2]))
-    fn = (gen_lines.generate if gen_type == "Lines"
-          else gen_circles.generate if gen_type == "Circles"
-          else gen_wave.generate)
+    fn = (gen_lines.generate    if gen_type == "Lines"
+          else gen_circles.generate  if gen_type == "Circles"
+          else gen_wave.generate     if gen_type == "Wave"
+          else gen_pendulum.generate)
     img = fn(cfg, scale=scale)
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=False)
