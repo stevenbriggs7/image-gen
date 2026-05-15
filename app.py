@@ -311,10 +311,10 @@ with st.container(height=500, border=False):
         )
 
         st.subheader("Wave Influence")
-        wave_gravity = st.slider(
-            "Wave gravity", 0.0, 1.0, D["wave_gravity"], step=0.05, format="%.2f",
-            help="How strongly lines are pulled toward the wave curve.",
-            key="w_grav",
+        line_scatter = st.slider(
+            "Scatter", 0.0, 0.4, D["line_scatter"], step=0.01, format="%.2f",
+            help="Spread line centres off the wave. 0 = all centres exactly on the wave.",
+            key="w_scatter",
         )
 
         st.subheader("Stroke")
@@ -423,7 +423,7 @@ elif gen_type == "Wave":
         "wave_frequency": float(wave_frequency),
         "wave_phase": float(wave_phase),
         "wave_angle": float(wave_angle),
-        "wave_gravity": float(wave_gravity),
+        "line_scatter": float(line_scatter),
         "length_median": float(length_median), "length_spread": float(length_spread),
         "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
         "stroke_width_min": sw_min, "stroke_width_max": sw_max,
