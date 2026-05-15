@@ -17,6 +17,7 @@ import generate_wave as gen_wave
 import generate_pendulum as gen_pendulum
 import generate_shapes as gen_shapes
 import generate_attractor as gen_attractor
+import generate_streamlines as gen_streamlines
 
 
 # ── Mood colour system ─────────────────────────────────────────────────────────
@@ -159,7 +160,7 @@ with st.container(height=500, border=False):
 
     # Type picker
     gen_type = st.radio(
-        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor"],
+        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -167,12 +168,13 @@ with st.container(height=500, border=False):
     st.divider()
 
     # Seed (shared)
-    defaults = (gen_lines.DEFAULTS      if gen_type == "Lines"
-                else gen_circles.DEFAULTS   if gen_type == "Circles"
-                else gen_wave.DEFAULTS      if gen_type == "Wave"
-                else gen_pendulum.DEFAULTS  if gen_type == "Pendulum"
-                else gen_shapes.DEFAULTS    if gen_type == "Shapes"
-                else gen_attractor.DEFAULTS)
+    defaults = (gen_lines.DEFAULTS        if gen_type == "Lines"
+                else gen_circles.DEFAULTS     if gen_type == "Circles"
+                else gen_wave.DEFAULTS        if gen_type == "Wave"
+                else gen_pendulum.DEFAULTS    if gen_type == "Pendulum"
+                else gen_shapes.DEFAULTS      if gen_type == "Shapes"
+                else gen_attractor.DEFAULTS   if gen_type == "Attractor"
+                else gen_streamlines.DEFAULTS)
     col_btn, col_val = st.columns([2, 3])
     with col_btn:
         if st.button("Randomize", use_container_width=True):
@@ -482,6 +484,47 @@ with st.container(height=500, border=False):
             key="at_gamma",
         )
 
+    elif gen_type == "Streamlines":
+        D = gen_streamlines.DEFAULTS
+
+        st.subheader("Flow")
+        n_lines = st.slider("Streams", 10, 500, D["n_lines"], step=10, key="sl_count")
+        n_steps = st.slider(
+            "Steps", 50, 2000, D["n_steps"], step=50,
+            help="How far each stream travels. More steps = longer, more winding paths.",
+            key="sl_steps",
+        )
+        step_size = st.slider(
+            "Step size (px)", 1.0, 20.0, D["step_size"], step=0.5, format="%.1f",
+            help="Distance moved each step. Larger = faster but coarser curves.",
+            key="sl_step_size",
+        )
+
+        st.subheader("Field")
+        noise_scale = st.slider(
+            "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
+            help="Low = sweeping river-like paths. High = chaotic turbulence.",
+            key="sl_noise_scale",
+        )
+        angle_range = st.slider(
+            "Angle range (x 2pi)", 0.05, 1.0, D["angle_range"], step=0.05, format="%.2f",
+            help="1.0 = any direction; 0.25 = constrained to a quadrant.",
+            key="sl_angle_range",
+        )
+
+        st.subheader("Stroke")
+        stroke_width = st.slider("Width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="sl_sw")
+        alpha_max = st.slider(
+            "Opacity start (0-255)", 0, 255, D["alpha_max"],
+            help="Opacity at the start of each stream (freshest ink).",
+            key="sl_alpha_max",
+        )
+        alpha_min = st.slider(
+            "Opacity end (0-255)", 0, 255, D["alpha_min"],
+            help="Opacity at the end of each stream (ink thinning).",
+            key="sl_alpha_min",
+        )
+
     # ── Composition (shared) ──────────────────────────────────────────────────
     st.subheader("Composition")
     margin = st.slider(
@@ -624,6 +667,22 @@ elif gen_type == "Attractor":
         "bg_hex": bg_hex, "fg_hex": fg_hex,
     }
     label = "attractor"
+elif gen_type == "Streamlines":
+    config = {
+        "seed": int(seed),
+        "output_width": out_w, "output_height": out_h,
+        "n_lines": int(n_lines),
+        "n_steps": int(n_steps),
+        "step_size": float(step_size),
+        "noise_scale": float(noise_scale),
+        "angle_range": float(angle_range),
+        "stroke_width": float(stroke_width),
+        "alpha_max": int(alpha_max),
+        "alpha_min": int(alpha_min),
+        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+        "bg_hex": bg_hex, "fg_hex": fg_hex,
+    }
+    label = "streamlines"
 else:
     config = {
         "seed": int(seed),
@@ -645,11 +704,12 @@ else:
 @st.cache_data(max_entries=40, show_spinner=False)
 def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
     cfg = dict(zip(cfg_key[::2], cfg_key[1::2]))
-    fn = (gen_lines.generate       if gen_type == "Lines"
-          else gen_circles.generate   if gen_type == "Circles"
-          else gen_wave.generate      if gen_type == "Wave"
-          else gen_pendulum.generate  if gen_type == "Pendulum"
-          else gen_shapes.generate    if gen_type == "Shapes"
+    fn = (gen_lines.generate           if gen_type == "Lines"
+          else gen_circles.generate       if gen_type == "Circles"
+          else gen_wave.generate          if gen_type == "Wave"
+          else gen_pendulum.generate      if gen_type == "Pendulum"
+          else gen_shapes.generate        if gen_type == "Shapes"
+          else gen_streamlines.generate   if gen_type == "Streamlines"
           else gen_attractor.generate)
     img = fn(cfg, scale=scale)
     buf = io.BytesIO()
