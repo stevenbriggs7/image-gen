@@ -633,18 +633,22 @@ with st.container(height=500, border=False):
         help="Fraction of the image to leave empty at each edge.",
         key="shared_margin",
     )
-    gravity = st.slider(
-        "Gravity strength", 0.0, 0.95, defaults["gravity"],
-        step=0.05, format="%.2f",
-        help="How strongly marks are pulled toward the centre.",
-        key="shared_gravity",
-    )
-    gravity_falloff = st.slider(
-        "Gravity falloff", 0.0, 1.0, defaults["gravity_falloff"],
-        step=0.05, format="%.2f",
-        help="How quickly gravity weakens with distance. 0 = uniform pull everywhere, 1 = only nearby marks affected.",
-        key="shared_gravity_falloff",
-    )
+    _GRAVITY_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi"}
+    if gen_type in _GRAVITY_TYPES:
+        gravity = st.slider(
+            "Gravity strength", 0.0, 0.95, defaults["gravity"],
+            step=0.05, format="%.2f",
+            help="How strongly marks are pulled toward the centre.",
+            key="shared_gravity",
+        )
+        gravity_falloff = st.slider(
+            "Gravity falloff", 0.0, 1.0, defaults["gravity_falloff"],
+            step=0.05, format="%.2f",
+            help="How quickly gravity weakens with distance. 0 = uniform pull everywhere, 1 = only nearby marks affected.",
+            key="shared_gravity_falloff",
+        )
+    else:
+        gravity = gravity_falloff = 0.0
 
     # ── Mood / Color & Output (shared) ────────────────────────────────────────
     st.subheader("Mood & Output")
