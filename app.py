@@ -22,6 +22,7 @@ import generate_streamlines as gen_streamlines
 import generate_voronoi as gen_voronoi
 import generate_cubes as gen_cubes
 import generate_spirograph as gen_spirograph
+import generate_warp as gen_warp
 
 
 # ── Mood colour system ─────────────────────────────────────────────────────────
@@ -741,6 +742,59 @@ with st.container(height=500, border=False):
     else:
         gravity = gravity_falloff = 0.0
 
+    # ── Warp field (shared) ───────────────────────────────────────────────────
+    st.subheader("Warp")
+    warp_type = st.selectbox(
+        "Type", ["None", "Noise", "Swirl", "Ripple", "Radial"],
+        key="w_type",
+    ).lower()
+    if warp_type != "none":
+        warp_strength = st.slider(
+            "Strength", 0, 300,
+            int(gen_warp.DEFAULTS["strength"]),
+            step=1, key="w_strength",
+            help="Maximum pixel displacement (Noise / Ripple / Swirl) or lens scale (Radial).",
+        )
+        if warp_type == "noise":
+            warp_noise_scale = st.slider(
+                "Field scale", 0.001, 0.015,
+                gen_warp.DEFAULTS["noise_scale"],
+                step=0.001, format="%.3f", key="w_ns",
+                help="Spatial scale of the noise pattern. Lower = larger blobs.",
+            )
+            warp_seed = st.number_input("Seed", 0, 99999, gen_warp.DEFAULTS["seed"], key="w_seed")
+        elif warp_type == "swirl":
+            warp_falloff = st.slider(
+                "Falloff", 0.0, 1.0, gen_warp.DEFAULTS["falloff"],
+                step=0.05, format="%.2f", key="w_falloff",
+                help="0 = hard vortex edge, 1 = very gradual fade to zero.",
+            )
+        elif warp_type == "ripple":
+            warp_frequency = st.slider(
+                "Frequency", 0.5, 20.0, gen_warp.DEFAULTS["frequency"],
+                step=0.5, format="%.1f", key="w_freq",
+                help="Number of wave cycles across the short canvas edge.",
+            )
+            warp_angle = st.slider(
+                "Direction", 0, 360, int(gen_warp.DEFAULTS["angle"]),
+                step=5, key="w_angle",
+                help="Wave propagation direction in degrees.",
+            )
+        # Radial: strength alone controls barrel (<0) vs pincushion (>0) intensity
+    else:
+        warp_strength = warp_noise_scale = warp_seed = 0
+        warp_falloff = warp_frequency = warp_angle = 0
+
+    warp_cfg = {
+        "warp_type":  warp_type,
+        "strength":   float(warp_strength) if warp_type != "none" else 0.0,
+        "noise_scale": float(warp_noise_scale) if warp_type == "noise" else gen_warp.DEFAULTS["noise_scale"],
+        "seed":        int(warp_seed)       if warp_type == "noise" else gen_warp.DEFAULTS["seed"],
+        "falloff":     float(warp_falloff)  if warp_type == "swirl"  else gen_warp.DEFAULTS["falloff"],
+        "frequency":   float(warp_frequency) if warp_type == "ripple" else gen_warp.DEFAULTS["frequency"],
+        "angle":       float(warp_angle)    if warp_type == "ripple" else gen_warp.DEFAULTS["angle"],
+    }
+
     # ── Mood / Color & Output (shared) ────────────────────────────────────────
     st.subheader("Mood & Output")
     col_mood, col_reroll = st.columns([3, 1])
@@ -944,7 +998,7 @@ else:
 # ── Cached generation ──────────────────────────────────────────────────────────
 
 @st.cache_data(max_entries=40, show_spinner=False)
-def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
+def _render_base(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
     cfg = dict(zip(cfg_key[::2], cfg_key[1::2]))
     fn = (gen_lines.generate           if gen_type == "Lines"
           else gen_circles.generate       if gen_type == "Circles"
@@ -962,6 +1016,16 @@ def _render(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
     return buf.getvalue()
 
 
+@st.cache_data(max_entries=40, show_spinner=False)
+def _render_warped(base_bytes: bytes, warp_key: tuple, scale: float) -> bytes:
+    warp_cfg = dict(zip(warp_key[::2], warp_key[1::2]))
+    img    = Image.open(io.BytesIO(base_bytes))
+    warped = gen_warp.apply(img, warp_cfg, scale=scale)
+    buf    = io.BytesIO()
+    warped.save(buf, format="PNG", optimize=False)
+    return buf.getvalue()
+
+
 def _cfg_key(cfg: dict) -> tuple:
     return tuple(x for pair in sorted(cfg.items()) for x in pair)
 
@@ -970,25 +1034,29 @@ def _cfg_key(cfg: dict) -> tuple:
 
 PREVIEW_MAX_W = 900
 preview_scale = min(PREVIEW_MAX_W / out_w, 1.0)
-key = _cfg_key(config)
+key      = _cfg_key(config)
+warp_key = _cfg_key(warp_cfg)
 
 with st.spinner("Rendering..."):
-    preview_bytes = _render(gen_type, key, preview_scale)
+    base_bytes    = _render_base(gen_type, key, preview_scale)
+    preview_bytes = _render_warped(base_bytes, warp_key, preview_scale)
 
 preview_img = Image.open(io.BytesIO(preview_bytes))
 img_placeholder.image(preview_img, use_container_width=True)
 gravity_note = f" · gravity {gravity:.2f}" if gravity > 0 else ""
+warp_note    = f" · warp {warp_cfg['warp_type']}" if warp_cfg["warp_type"] != "none" else ""
 caption_placeholder.caption(
     f"{_MOOD_LABELS[mood]}  ·  {bg_hex} / {fg_hex}  ·  "
     f"preview {preview_img.width}×{preview_img.height} px"
-    f"{gravity_note}"
+    f"{gravity_note}{warp_note}"
 )
 
 # ── Export ─────────────────────────────────────────────────────────────────────
 
 if render_full:
     with st.spinner(f"Rendering {out_w}x{out_h} px..."):
-        full_bytes = _render(gen_type, key, 1.0)
+        full_base  = _render_base(gen_type, key, 1.0)
+        full_bytes = _render_warped(full_base, warp_key, 1.0)
     st.download_button(
         "Download PNG",
         data=full_bytes,
