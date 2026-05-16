@@ -49,8 +49,8 @@ ATTRACTOR_PARAM_DEFAULTS: dict = {
     "clifford":  {"a":  1.7,    "b":  1.8,   "c": -1.9,   "d": -0.4},
     "dejong":    {"a":  1.7,    "b":  1.8,   "c": -1.9,   "d": -0.4},
     "svensson":  {"a": -2.337,  "b":  1.765, "c": -0.921, "d":  0.879},
-    "ikeda":     {"a":  0.9,    "b":  0.4,   "c":  6.0,   "d":  1.0},
-    "hopalong":  {"a":  0.4,    "b":  1.0,   "c":  0.0,   "d":  0.0},
+    "ikeda":     {"a":  0.85,   "b":  0.4,   "c":  6.0,   "d":  1.0},
+    "hopalong":  {"a":  1.5,    "b":  1.0,   "c":  1.0,   "d":  0.0},
 }
 
 _SKIP    = 500   # warm-up steps discarded per chain
@@ -74,7 +74,7 @@ def _step(kind: str, x_arr: np.ndarray, y_arr: np.ndarray,
         return (y_arr - np.sign(x_arr) * np.sqrt(np.abs(b*x_arr - c)),
                 a - x_arr)
     else:  # ikeda — clamp u; b=angle_offset, c=angle_scale, d=x_shift
-        u = np.clip(a, np.float32(0.01), np.float32(0.99))
+        u = np.clip(a, np.float32(0.68), np.float32(0.90))
         t = b - c / (np.float32(1.0) + x_arr**2 + y_arr**2)
         return (d + u*(x_arr*np.cos(t) - y_arr*np.sin(t)),
                 u*(x_arr*np.sin(t) + y_arr*np.cos(t)))

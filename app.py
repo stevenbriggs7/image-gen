@@ -508,8 +508,8 @@ with st.container(height=500, border=False):
         st.subheader("Parameters")
         if _at_kind == "ikeda":
             # Ikeda is intrinsically 1-param; b/c/d use canonical values that keep the map chaotic
-            a = st.slider("a  (= u)", 0.01, 0.92, _ik["a"], step=0.01, format="%.2f", key="at_a",
-                          help="Contraction ratio. Above 0.92 the orbit collapses to a fixed point.")
+            a = st.slider("a  (= u)", 0.68, 0.90, _ik["a"], step=0.01, format="%.2f", key="at_a",
+                          help="Contraction ratio — entire range produces chaotic spirals.")
             b, c, d = _ik["b"], _ik["c"], _ik["d"]
         else:
             a = st.slider("a", -3.0, 3.0, D["a"], step=0.05, format="%.2f", key="at_a")
