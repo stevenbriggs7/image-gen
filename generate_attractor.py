@@ -48,7 +48,7 @@ ATTRACTOR_PARAM_DEFAULTS: dict = {
     "clifford":  {"a":  1.7,    "b":  1.8,   "c": -1.9,   "d": -0.4},
     "dejong":    {"a":  1.7,    "b":  1.8,   "c": -1.9,   "d": -0.4},
     "svensson":  {"a": -2.337,  "b":  1.765, "c": -0.921, "d":  0.879},
-    "ikeda":     {"a":  0.918,  "b":  0.0,   "c":  0.0,   "d":  0.0},
+    "ikeda":     {"a":  0.9,    "b":  0.0,   "c":  0.0,   "d":  0.0},
 }
 
 _SKIP    = 500   # warm-up steps discarded per chain
