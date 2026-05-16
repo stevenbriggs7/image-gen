@@ -1,13 +1,14 @@
 """
 Strange attractor: iterate a chaotic 2D map and plot the point density.
 
-Four attractors are supported:
+Five attractors are supported:
   Clifford:      x' = sin(a·y) + c·cos(a·x),  y' = sin(b·x) + d·cos(b·y)
   Peter de Jong: x' = sin(a·y) − cos(b·x),    y' = sin(c·x) − cos(d·y)
   Svensson:      x' = d·sin(a·x) − sin(b·y),  y' = c·cos(a·x) + cos(b·y)
-  Ikeda:         t  = 0.4 − 6/(1+x²+y²)
-                 x' = 1 + a·(x·cos(t) − y·sin(t))
-                 y' = a·(x·sin(t) + y·cos(t))      [only param a = u]
+  Ikeda:         t  = b − c/(1+x²+y²)
+                 x' = d + a·(x·cos(t) − y·sin(t))
+                 y' = a·(x·sin(t) + y·cos(t))   [a=u∈(0,1); b,c,d shape the orbit]
+  Hopalong:      x' = y − sign(x)·√|b·x − c|,  y' = a − x
 
 Speed trick: instead of one sequential chain of N steps, we run N_CHAINS
 independent orbits in parallel using numpy vectorisation. After a short
@@ -27,7 +28,7 @@ DEFAULTS: dict = {
     "seed": 42,               # unused — attractor is deterministic; kept for API parity
     "output_width": 1200,
     "output_height": 800,
-    "attractor": "clifford",  # "clifford" | "dejong" | "svensson" | "ikeda"
+    "attractor": "clifford",  # "clifford" | "dejong" | "svensson" | "ikeda" | "hopalong"
     "a":  1.7,
     "b":  1.8,
     "c": -1.9,
@@ -48,7 +49,8 @@ ATTRACTOR_PARAM_DEFAULTS: dict = {
     "clifford":  {"a":  1.7,    "b":  1.8,   "c": -1.9,   "d": -0.4},
     "dejong":    {"a":  1.7,    "b":  1.8,   "c": -1.9,   "d": -0.4},
     "svensson":  {"a": -2.337,  "b":  1.765, "c": -0.921, "d":  0.879},
-    "ikeda":     {"a":  0.9,    "b":  0.0,   "c":  0.0,   "d":  0.0},
+    "ikeda":     {"a":  0.9,    "b":  0.4,   "c":  6.0,   "d":  1.0},
+    "hopalong":  {"a":  0.4,    "b":  1.0,   "c":  0.0,   "d":  0.0},
 }
 
 _SKIP    = 500   # warm-up steps discarded per chain
@@ -68,10 +70,13 @@ def _step(kind: str, x_arr: np.ndarray, y_arr: np.ndarray,
     elif kind == "svensson":
         return (d*np.sin(a*x_arr) - np.sin(b*y_arr),
                 c*np.cos(a*x_arr) + np.cos(b*y_arr))
-    else:  # ikeda — clamp u to stable range regardless of slider value
+    elif kind == "hopalong":
+        return (y_arr - np.sign(x_arr) * np.sqrt(np.abs(b*x_arr - c)),
+                a - x_arr)
+    else:  # ikeda — clamp u; b=angle_offset, c=angle_scale, d=x_shift
         u = np.clip(a, np.float32(0.01), np.float32(0.99))
-        t = np.float32(0.4) - np.float32(6.0) / (np.float32(1.0) + x_arr**2 + y_arr**2)
-        return (np.float32(1.0) + u*(x_arr*np.cos(t) - y_arr*np.sin(t)),
+        t = b - c / (np.float32(1.0) + x_arr**2 + y_arr**2)
+        return (d + u*(x_arr*np.cos(t) - y_arr*np.sin(t)),
                 u*(x_arr*np.sin(t) + y_arr*np.cos(t)))
 
 

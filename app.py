@@ -492,8 +492,8 @@ with st.container(height=500, border=False):
 
         st.subheader("Attractor")
         attractor_type = st.selectbox(
-            "Type", ["Clifford", "De Jong", "Svensson", "Ikeda"],
-            index=["clifford", "dejong", "svensson", "ikeda"].index(D["attractor"]),
+            "Type", ["Clifford", "De Jong", "Svensson", "Ikeda", "Hopalong"],
+            index=["clifford", "dejong", "svensson", "ikeda", "hopalong"].index(D["attractor"]),
             key="at_type",
             on_change=_reset_attractor_params,
         )
@@ -504,18 +504,19 @@ with st.container(height=500, border=False):
         )
 
         _at_kind = attractor_type.lower().replace(" ", "").replace("_", "")
+        _ik = _AT_PARAMS["ikeda"]
         st.subheader("Parameters")
         if _at_kind == "ikeda":
-            a = st.slider("a  (= u)", 0.01, 0.95, D["a"], step=0.01, format="%.2f", key="at_a",
-                          help="Contraction ratio. Values 0.6–0.92 produce interesting spiral attractors; above ~0.92 the map collapses to a fixed point.")
+            # Ikeda is intrinsically 1-param; b/c/d use canonical values that keep the map chaotic
+            a = st.slider("a  (= u)", 0.01, 0.92, _ik["a"], step=0.01, format="%.2f", key="at_a",
+                          help="Contraction ratio. Above 0.92 the orbit collapses to a fixed point.")
+            b, c, d = _ik["b"], _ik["c"], _ik["d"]
         else:
             a = st.slider("a", -3.0, 3.0, D["a"], step=0.05, format="%.2f", key="at_a")
-        b = st.slider("b", -3.0, 3.0, D["b"], step=0.05, format="%.2f", key="at_b",
-                      help="Not used by Ikeda." if _at_kind == "ikeda" else None)
-        c = st.slider("c", -3.0, 3.0, D["c"], step=0.05, format="%.2f", key="at_c",
-                      help="Not used by Ikeda." if _at_kind == "ikeda" else None)
-        d = st.slider("d", -3.0, 3.0, D["d"], step=0.05, format="%.2f", key="at_d",
-                      help="Not used by Ikeda." if _at_kind == "ikeda" else None)
+            b = st.slider("b", -3.0, 3.0, D["b"], step=0.05, format="%.2f", key="at_b")
+            c = st.slider("c", -3.0, 3.0, D["c"], step=0.05, format="%.2f", key="at_c")
+            d = st.slider("d", -3.0, 3.0, D["d"], step=0.05, format="%.2f", key="at_d",
+                          help="Not used by Hopalong." if _at_kind == "hopalong" else None)
 
         st.subheader("Tone")
         gamma = st.slider(
