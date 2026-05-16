@@ -17,6 +17,7 @@ import generate_wave as gen_wave
 import generate_pendulum as gen_pendulum
 import generate_shapes as gen_shapes
 import generate_attractor as gen_attractor
+from generate_attractor import ATTRACTOR_PARAM_DEFAULTS as _AT_PARAMS
 import generate_streamlines as gen_streamlines
 import generate_voronoi as gen_voronoi
 import generate_cubes as gen_cubes
@@ -164,6 +165,14 @@ if "colour_seed" not in st.session_state:
 
 def _reroll_colours() -> None:
     st.session_state.colour_seed = random.randint(0, 99999)
+
+
+def _reset_attractor_params() -> None:
+    label = st.session_state.get("at_type", "Clifford")
+    key = label.lower().replace(" ", "").replace("_", "")
+    p = _AT_PARAMS.get(key, _AT_PARAMS["clifford"])
+    for param, sk in [("a", "at_a"), ("b", "at_b"), ("c", "at_c"), ("d", "at_d")]:
+        st.session_state[sk] = float(p[param])
 
 
 # Image placeholder at top — filled after params are collected
@@ -483,9 +492,10 @@ with st.container(height=500, border=False):
 
         st.subheader("Attractor")
         attractor_type = st.selectbox(
-            "Type", ["Clifford", "De Jong"],
-            index=0 if D["attractor"] == "clifford" else 1,
+            "Type", ["Clifford", "De Jong", "Svensson", "Ikeda"],
+            index=["clifford", "dejong", "svensson", "ikeda"].index(D["attractor"]),
             key="at_type",
+            on_change=_reset_attractor_params,
         )
         n_iter = st.slider(
             "Iterations", 500_000, 8_000_000, D["n_iter"], step=500_000,
@@ -493,11 +503,15 @@ with st.container(height=500, border=False):
             key="at_iter",
         )
 
+        _at_kind = attractor_type.lower().replace(" ", "").replace("_", "")
         st.subheader("Parameters")
         a = st.slider("a", -3.0, 3.0, D["a"], step=0.05, format="%.2f", key="at_a")
-        b = st.slider("b", -3.0, 3.0, D["b"], step=0.05, format="%.2f", key="at_b")
-        c = st.slider("c", -3.0, 3.0, D["c"], step=0.05, format="%.2f", key="at_c")
-        d = st.slider("d", -3.0, 3.0, D["d"], step=0.05, format="%.2f", key="at_d")
+        b = st.slider("b", -3.0, 3.0, D["b"], step=0.05, format="%.2f", key="at_b",
+                      help="Not used by Ikeda." if _at_kind == "ikeda" else None)
+        c = st.slider("c", -3.0, 3.0, D["c"], step=0.05, format="%.2f", key="at_c",
+                      help="Not used by Ikeda." if _at_kind == "ikeda" else None)
+        d = st.slider("d", -3.0, 3.0, D["d"], step=0.05, format="%.2f", key="at_d",
+                      help="Not used by Ikeda." if _at_kind == "ikeda" else None)
 
         st.subheader("Tone")
         gamma = st.slider(

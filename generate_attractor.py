@@ -1,9 +1,13 @@
 """
 Strange attractor: iterate a chaotic 2D map and plot the point density.
 
-Two attractors are supported:
+Four attractors are supported:
   Clifford:      x' = sin(a·y) + c·cos(a·x),  y' = sin(b·x) + d·cos(b·y)
   Peter de Jong: x' = sin(a·y) − cos(b·x),    y' = sin(c·x) − cos(d·y)
+  Svensson:      x' = d·sin(a·x) − sin(b·y),  y' = c·cos(a·x) + cos(b·y)
+  Ikeda:         t  = 0.4 − 6/(1+x²+y²)
+                 x' = 1 + a·(x·cos(t) − y·sin(t))
+                 y' = a·(x·sin(t) + y·cos(t))      [only param a = u]
 
 Speed trick: instead of one sequential chain of N steps, we run N_CHAINS
 independent orbits in parallel using numpy vectorisation. After a short
@@ -23,7 +27,7 @@ DEFAULTS: dict = {
     "seed": 42,               # unused — attractor is deterministic; kept for API parity
     "output_width": 1200,
     "output_height": 800,
-    "attractor": "clifford",  # "clifford" | "dejong"
+    "attractor": "clifford",  # "clifford" | "dejong" | "svensson" | "ikeda"
     "a":  1.7,
     "b":  1.8,
     "c": -1.9,
@@ -38,8 +42,36 @@ DEFAULTS: dict = {
     "fg_hex": "#141419",
 }
 
+# Good starting parameters per attractor type — used by the UI to reset
+# sliders when the user switches type.
+ATTRACTOR_PARAM_DEFAULTS: dict = {
+    "clifford":  {"a":  1.7,    "b":  1.8,   "c": -1.9,   "d": -0.4},
+    "dejong":    {"a":  1.7,    "b":  1.8,   "c": -1.9,   "d": -0.4},
+    "svensson":  {"a": -2.337,  "b":  1.765, "c": -0.921, "d":  0.879},
+    "ikeda":     {"a":  0.918,  "b":  0.0,   "c":  0.0,   "d":  0.0},
+}
+
 _SKIP    = 500   # warm-up steps discarded per chain
 _NCHAINS = 128   # parallel chains; keeps numpy arrays at a workable size
+
+
+def _step(kind: str, x_arr: np.ndarray, y_arr: np.ndarray,
+          a: np.float32, b: np.float32,
+          c: np.float32, d: np.float32) -> tuple[np.ndarray, np.ndarray]:
+    """Apply one iteration of the chosen map to all chains."""
+    if kind == "clifford":
+        return (np.sin(a*y_arr) + c*np.cos(a*x_arr),
+                np.sin(b*x_arr) + d*np.cos(b*y_arr))
+    elif kind == "dejong":
+        return (np.sin(a*y_arr) - np.cos(b*x_arr),
+                np.sin(c*x_arr) - np.cos(d*y_arr))
+    elif kind == "svensson":
+        return (d*np.sin(a*x_arr) - np.sin(b*y_arr),
+                c*np.cos(a*x_arr) + np.cos(b*y_arr))
+    else:  # ikeda
+        t = np.float32(0.4) - np.float32(6.0) / (np.float32(1.0) + x_arr**2 + y_arr**2)
+        return (np.float32(1.0) + a*(x_arr*np.cos(t) - y_arr*np.sin(t)),
+                a*(x_arr*np.sin(t) + y_arr*np.cos(t)))
 
 
 def generate(config: dict, scale: float = 1.0) -> Image.Image:
@@ -70,16 +102,9 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     x_arr = rng.uniform(-0.1, 0.1, _NCHAINS).astype(np.float32)
     y_arr = rng.uniform(-0.1, 0.1, _NCHAINS).astype(np.float32)
 
-    clifford = (kind == "clifford")
-
     # ── 2. Warm-up: run each chain until it's on the attractor ───────────────
     for _ in range(_SKIP):
-        if clifford:
-            x_arr, y_arr = (np.sin(a*y_arr) + c*np.cos(a*x_arr),
-                            np.sin(b*x_arr) + d*np.cos(b*y_arr))
-        else:
-            x_arr, y_arr = (np.sin(a*y_arr) - np.cos(b*x_arr),
-                            np.sin(c*x_arr) - np.cos(d*y_arr))
+        x_arr, y_arr = _step(kind, x_arr, y_arr, a, b, c, d)
 
     # ── 3. Collect points from all chains in parallel ─────────────────────────
     total_pts = _NCHAINS * n_per_chain
@@ -87,19 +112,19 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     all_y = np.empty(total_pts, dtype=np.float32)
 
     for i in range(n_per_chain):
-        if clifford:
-            x_arr, y_arr = (np.sin(a*y_arr) + c*np.cos(a*x_arr),
-                            np.sin(b*x_arr) + d*np.cos(b*y_arr))
-        else:
-            x_arr, y_arr = (np.sin(a*y_arr) - np.cos(b*x_arr),
-                            np.sin(c*x_arr) - np.cos(d*y_arr))
+        x_arr, y_arr = _step(kind, x_arr, y_arr, a, b, c, d)
         sl = slice(i * _NCHAINS, (i + 1) * _NCHAINS)
         all_x[sl] = x_arr
         all_y[sl] = y_arr
 
+    # ── 4. Filter non-finite points (bad params can cause divergence) ─────────
     xs, ys = all_x[:n_iter], all_y[:n_iter]
+    finite = np.isfinite(xs) & np.isfinite(ys)
+    xs, ys = xs[finite], ys[finite]
+    if len(xs) == 0:
+        return Image.new("RGB", (width, height), bg)
 
-    # ── 4. Histogram ──────────────────────────────────────────────────────────
+    # ── 5. Histogram ──────────────────────────────────────────────────────────
     x_lo, x_hi = float(xs.min()), float(xs.max())
     y_lo, y_hi = float(ys.min()), float(ys.max())
     pad_x = (x_hi - x_lo) * 0.02 + 1e-6
@@ -111,14 +136,14 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
         range=[[y_lo - pad_y, y_hi + pad_y], [x_lo - pad_x, x_hi + pad_x]],
     )
 
-    # ── 5. Tone map ───────────────────────────────────────────────────────────
+    # ── 6. Tone map ───────────────────────────────────────────────────────────
     v = np.log1p(grid.astype(np.float32))
     v_max = v.max()
     if v_max > 0.0:
         v /= v_max
     v = np.power(v, gamma)
 
-    # ── 6. Colour blend ───────────────────────────────────────────────────────
+    # ── 7. Colour blend ───────────────────────────────────────────────────────
     img_arr = np.empty((height, width, 3), dtype=np.uint8)
     for ch in range(3):
         channel = bg[ch] + (fg[ch] - bg[ch]) * v
