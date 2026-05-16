@@ -103,8 +103,9 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     modulation = np.clip(1.0 + nv * noise_inf, 0.15, 2.0)
     radii = np.clip(base_radii * modulation, 1.0 * scale, max_r * 1.5)
 
-    # Alphas
-    alphas = rng.integers(a_min, a_max, n_circles)
+    # Alphas — noise modulates tone as well as size
+    alphas = rng.integers(a_min, a_max, n_circles).astype(float)
+    alphas = np.clip(alphas + nv * noise_inf * (a_max - a_min), a_min, a_max - 1).astype(int)
 
     # Draw largest circles first so small ones appear on top
     order = np.argsort(radii)[::-1]

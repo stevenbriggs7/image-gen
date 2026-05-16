@@ -124,18 +124,20 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     log_s = rng.normal(math.log(max(s_median, 1.0)), s_spread, n_total)
     base_sizes = np.clip(np.exp(log_s), 1.0 * scale, max_s)
 
+    alphas = rng.integers(a_min, a_max, n_total).astype(float)
     if noise_inf > 0.0:
         noise_field = _fractal_noise_field(width, height, ns, seed=seed + 99991)
         xi = np.clip(xs.astype(np.intp), 0, width  - 1)
         yi = np.clip(ys.astype(np.intp), 0, height - 1)
         nv = noise_field[yi, xi]
         modulation = np.clip(1.0 + nv * noise_inf, 0.15, 2.0)
-        sizes = np.clip(base_sizes * modulation, 1.0 * scale, max_s * 1.5)
+        sizes  = np.clip(base_sizes * modulation, 1.0 * scale, max_s * 1.5)
+        alphas = np.clip(alphas + nv * noise_inf * (a_max - a_min), a_min, a_max - 1)
     else:
         sizes = base_sizes
 
     # ── 4. Alphas and rotations ───────────────────────────────────────────────
-    alphas    = rng.integers(a_min, a_max, n_total)
+    alphas    = alphas.astype(int)
     rot_range = rotation * math.pi          # max deviation from default orientation
     rotations = rng.uniform(-rot_range, rot_range, n_total)
 

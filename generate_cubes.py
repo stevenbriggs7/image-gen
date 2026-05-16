@@ -151,15 +151,17 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     log_sizes = rng.normal(math.log(max(l_median, 1.0)), l_spread, n_cubes)
     sizes = np.clip(np.exp(log_sizes), 2.0 * scale, min(width, height) * 0.4)
 
+    alphas = rng.integers(a_min, a_max, n_cubes).astype(float)
     if noise_inf > 0.0:
         noise_field = _fractal_noise_field(width, height, ns, seed=seed + 99991)
         xi = np.clip(xs.astype(np.intp), 0, width  - 1)
         yi = np.clip(ys.astype(np.intp), 0, height - 1)
         nv = noise_field[yi, xi]
-        sizes = sizes * np.clip(1.0 + nv * noise_inf, 0.15, 2.5)
+        sizes  = sizes * np.clip(1.0 + nv * noise_inf, 0.15, 2.5)
+        alphas = np.clip(alphas + nv * noise_inf * (a_max - a_min), a_min, a_max - 1)
 
     # ── 3. Alphas + painter sort (top of canvas first) ────────────────────────
-    alphas = rng.integers(a_min, a_max, n_cubes)
+    alphas = alphas.astype(int)
     order  = np.argsort(ys)   # ascending cy → draw topmost (furthest) first
 
     # ── 4. Shade factors for 3 faces ─────────────────────────────────────────
