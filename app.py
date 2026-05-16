@@ -5,6 +5,7 @@ Run:
     streamlit run app.py
 """
 
+import base64
 import colorsys
 import io
 import random
@@ -151,9 +152,45 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-header[data-testid="stHeader"] { display: none; }
-.block-container { padding-top: 0.5rem !important; padding-bottom: 0 !important; }
+header[data-testid="stHeader"], footer, #MainMenu,
+[data-testid="stDecoration"], [data-testid="stStatusWidget"] { display: none !important; }
+
+html, body { height: 100%; overflow: hidden !important; }
+
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"] {
+    height: 100vh !important;
+    overflow: hidden !important;
+}
+
+[data-testid="stMainBlockContainer"] {
+    max-width: 1200px !important;
+    margin: 0 auto !important;
+    padding: 0 1rem !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Pass flex layout through Streamlit's wrapper div */
+[data-testid="stMainBlockContainer"] > div {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Image panel: natural height, no grow */
 [data-testid="stImage"] img { max-height: 42vh; width: 100%; object-fit: contain; }
+
+/* Controls panel: last child fills remaining space and scrolls */
+[data-testid="stMainBlockContainer"] > div > div:last-child {
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -176,13 +213,12 @@ def _reset_attractor_params() -> None:
         st.session_state[sk] = float(p[param])
 
 
-# Image placeholder at top — filled after params are collected
 img_placeholder     = st.empty()
 caption_placeholder = st.empty()
 
 # ── Controls panel ─────────────────────────────────────────────────────────────
 
-with st.container(height=500, border=False):
+with st.container(border=False):
 
     # Type picker
     gen_type = st.radio(
