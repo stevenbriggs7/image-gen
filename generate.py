@@ -210,7 +210,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
     xi = np.clip(xs.astype(np.intp), 0, width  - 1)
     yi = np.clip(ys.astype(np.intp), 0, height - 1)
     nv = noise_field[yi, xi]
-    angles = (nv + 1.0) * 0.5 * a_range
+    angles = nv * (a_range * 0.5)
 
     img = Image.new("RGB", (width, height), bg)
 
@@ -279,7 +279,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
             if s < flow_steps - 1:
                 xi_s = np.clip(x_curr.astype(np.intp), 0, width  - 1)
                 yi_s = np.clip(y_curr.astype(np.intp), 0, height - 1)
-                cur_angles = (noise_field[yi_s, xi_s] + 1.0) * 0.5 * a_range
+                cur_angles = noise_field[yi_s, xi_s] * (a_range * 0.5)
 
         if invert_overlap:
             canvas_arr = np.array(img, dtype=np.float32)

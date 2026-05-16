@@ -107,7 +107,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
 
     xi = np.clip(x_curr.astype(np.intp), 0, width  - 1)
     yi = np.clip(y_curr.astype(np.intp), 0, height - 1)
-    cur_angles = (noise_field[yi, xi] + 1.0) * 0.5 * a_range
+    cur_angles = noise_field[yi, xi] * (a_range * 0.5)
 
     for s in range(n_steps):
         x_curr = x_curr + np.cos(cur_angles) * step_size
@@ -117,7 +117,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
         if s < n_steps - 1:
             xi = np.clip(x_curr.astype(np.intp), 0, width  - 1)
             yi = np.clip(y_curr.astype(np.intp), 0, height - 1)
-            cur_angles = (noise_field[yi, xi] + 1.0) * 0.5 * a_range
+            cur_angles = noise_field[yi, xi] * (a_range * 0.5)
 
     # ── 4. Pre-blended colour LUT ─────────────────────────────────────────────
     color_lut: dict[int, tuple[int, int, int]] = {}
