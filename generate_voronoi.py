@@ -110,7 +110,7 @@ def generate(config: dict, scale: float = 1.0) -> Image.Image:
         xi = np.clip(xs.astype(np.intp), 0, width  - 1)
         yi = np.clip(ys.astype(np.intp), 0, height - 1)
         nv = noise_field[yi, xi]
-        alphas = alphas + nv * noise_inf * (a_max - a_min) * 0.5
+        alphas = alphas + nv * noise_inf * (a_max - a_min)
         alphas = np.clip(alphas, a_min, a_max - 1).astype(int)
     else:
         alphas = alphas.astype(int)
