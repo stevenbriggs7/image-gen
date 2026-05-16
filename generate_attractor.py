@@ -68,10 +68,11 @@ def _step(kind: str, x_arr: np.ndarray, y_arr: np.ndarray,
     elif kind == "svensson":
         return (d*np.sin(a*x_arr) - np.sin(b*y_arr),
                 c*np.cos(a*x_arr) + np.cos(b*y_arr))
-    else:  # ikeda
+    else:  # ikeda — clamp u to stable range regardless of slider value
+        u = np.clip(a, np.float32(0.01), np.float32(0.99))
         t = np.float32(0.4) - np.float32(6.0) / (np.float32(1.0) + x_arr**2 + y_arr**2)
-        return (np.float32(1.0) + a*(x_arr*np.cos(t) - y_arr*np.sin(t)),
-                a*(x_arr*np.sin(t) + y_arr*np.cos(t)))
+        return (np.float32(1.0) + u*(x_arr*np.cos(t) - y_arr*np.sin(t)),
+                u*(x_arr*np.sin(t) + y_arr*np.cos(t)))
 
 
 def generate(config: dict, scale: float = 1.0) -> Image.Image:

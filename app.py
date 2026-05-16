@@ -505,7 +505,11 @@ with st.container(height=500, border=False):
 
         _at_kind = attractor_type.lower().replace(" ", "").replace("_", "")
         st.subheader("Parameters")
-        a = st.slider("a", -3.0, 3.0, D["a"], step=0.05, format="%.2f", key="at_a")
+        if _at_kind == "ikeda":
+            a = st.slider("a  (= u)", 0.01, 0.99, D["a"], step=0.01, format="%.2f", key="at_a",
+                          help="Contraction ratio. Values 0.6–0.95 produce interesting spiral attractors.")
+        else:
+            a = st.slider("a", -3.0, 3.0, D["a"], step=0.05, format="%.2f", key="at_a")
         b = st.slider("b", -3.0, 3.0, D["b"], step=0.05, format="%.2f", key="at_b",
                       help="Not used by Ikeda." if _at_kind == "ikeda" else None)
         c = st.slider("c", -3.0, 3.0, D["c"], step=0.05, format="%.2f", key="at_c",
