@@ -685,12 +685,12 @@ with st.container(height=500, border=False):
             help="Random per-stroke width jitter for a hand-drawn rhythm.",
         )
         stroke_break_density = st.slider(
-            "Break density", 0.0, 0.5, float(defaults.get("stroke_break_density", 0.0)),
+            "Break density", 0.0, 1.0, float(defaults.get("stroke_break_density", 0.0)),
             step=0.02, key="sc_break",
             help="Fraction of strokes/segments randomly omitted (dry-brush gaps).",
         )
         stroke_roughness = st.slider(
-            "Roughness", 0.0, 2.0, float(defaults.get("stroke_roughness", 0.0)),
+            "Roughness", 0.0, 5.0, float(defaults.get("stroke_roughness", 0.0)),
             step=0.1, key="sc_rough",
             help="Perpendicular wobble amplitude (× stroke width) for hand-tremor feel.",
         )
