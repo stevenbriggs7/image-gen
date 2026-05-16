@@ -212,10 +212,10 @@ with st.container(height=500, border=False):
         D = gen_lines.DEFAULTS
 
         st.subheader("Lines")
-        n_lines       = st.slider("Count", 50, 5000, D["n_lines"], step=50, key="l_count")
-        length_median = st.slider("Length median (px)", 5, 400, int(D["length_median"]), key="l_len_med")
+        n_lines       = st.slider("Count", 1, 5000, D["n_lines"], step=1, key="l_count")
+        length_median = st.slider("Length median (px)", 1, 2000, int(D["length_median"]), key="l_len_med")
         length_spread = st.slider(
-            "Length variation", 0.1, 2.0, D["length_spread"], step=0.05, format="%.2f",
+            "Length variation", 0.1, 3.0, D["length_spread"], step=0.05, format="%.2f",
             help="Log-normal spread. 0.1 = uniform, 1.5 = extreme.",
             key="l_len_spread",
         )
@@ -236,7 +236,7 @@ with st.container(height=500, border=False):
 
         st.subheader("Stroke")
         sw_min, sw_max = st.slider(
-            "Width range (px)", 0.5, 8.0,
+            "Width range (px)", 0.5, 20.0,
             (D["stroke_width_min"], D["stroke_width_max"]),
             step=0.5, key="l_sw",
         )
@@ -246,7 +246,7 @@ with st.container(height=500, border=False):
             key="l_alpha",
         )
         flow_steps = st.slider(
-            "Curve steps", 1, 20, D["flow_steps"], step=1,
+            "Curve steps", 1, 50, D["flow_steps"], step=1,
             help="1 = straight lines. Higher values trace each stroke through the flow field, creating organic curves.",
             key="l_flow",
         )
@@ -262,10 +262,10 @@ with st.container(height=500, border=False):
         D = gen_circles.DEFAULTS
 
         st.subheader("Circles")
-        n_circles     = st.slider("Count", 50, 3000, D["n_circles"], step=50, key="c_count")
-        radius_median = st.slider("Radius median (px)", 2, 200, int(D["radius_median"]), key="c_rad_med")
+        n_circles     = st.slider("Count", 1, 3000, D["n_circles"], step=1, key="c_count")
+        radius_median = st.slider("Radius median (px)", 1, 2000, int(D["radius_median"]), key="c_rad_med")
         radius_spread = st.slider(
-            "Radius variation", 0.1, 2.0, D["radius_spread"], step=0.05, format="%.2f",
+            "Radius variation", 0.1, 3.0, D["radius_spread"], step=0.05, format="%.2f",
             help="Log-normal spread. 0.2 = uniform, 1.2 = extreme range.",
             key="c_rad_spread",
         )
@@ -288,7 +288,7 @@ with st.container(height=500, border=False):
         filled = st.toggle("Filled discs", value=D["filled"],
                            help="Off = ring outlines.", key="c_filled")
         if not filled:
-            stroke_w = st.slider("Ring thickness (px)", 0.5, 6.0, D["stroke_width"],
+            stroke_w = st.slider("Ring thickness (px)", 0.5, 20.0, D["stroke_width"],
                                  step=0.5, key="c_stroke_w")
         else:
             stroke_w = D["stroke_width"]
@@ -311,10 +311,10 @@ with st.container(height=500, border=False):
         D = gen_wave.DEFAULTS
 
         st.subheader("Wave Lines")
-        n_lines       = st.slider("Count", 50, 3000, D["n_lines"], step=50, key="w_count")
-        length_median = st.slider("Length median (px)", 5, 300, int(D["length_median"]), key="w_len_med")
+        n_lines       = st.slider("Count", 1, 3000, D["n_lines"], step=1, key="w_count")
+        length_median = st.slider("Length median (px)", 1, 2000, int(D["length_median"]), key="w_len_med")
         length_spread = st.slider(
-            "Length variation", 0.1, 2.0, D["length_spread"], step=0.05, format="%.2f",
+            "Length variation", 0.1, 3.0, D["length_spread"], step=0.05, format="%.2f",
             key="w_len_spread",
         )
 
@@ -325,7 +325,7 @@ with st.container(height=500, border=False):
             key="w_amp",
         )
         wave_frequency = st.slider(
-            "Frequency", 0.25, 8.0, D["wave_frequency"], step=0.25, format="%.2f",
+            "Frequency", 0.1, 20.0, D["wave_frequency"], step=0.1, format="%.2f",
             help="Number of complete cycles across the canvas width.",
             key="w_freq",
         )
@@ -354,7 +354,7 @@ with st.container(height=500, border=False):
 
         st.subheader("Stroke")
         sw_min, sw_max = st.slider(
-            "Width range (px)", 0.5, 8.0,
+            "Width range (px)", 0.5, 20.0,
             (D["stroke_width_min"], D["stroke_width_max"]),
             step=0.5, key="w_sw",
         )
@@ -402,7 +402,7 @@ with st.container(height=500, border=False):
             key="p_damp",
         )
         n_steps = st.slider(
-            "Steps", 1, 10000, min(D["n_steps"], 10000), step=100,
+            "Steps", 1, 50000, min(D["n_steps"], 50000), step=100,
             help="Simulation length — more steps draw more loops of the pattern.",
             key="p_steps",
         )
@@ -414,7 +414,7 @@ with st.container(height=500, border=False):
 
         st.subheader("Stroke")
         stroke_width = st.slider(
-            "Width (px)", 0.5, 8.0, D["stroke_width"], step=0.5,
+            "Width (px)", 0.5, 20.0, D["stroke_width"], step=0.5,
             key="p_sw",
         )
         p_alpha_max = st.slider(
@@ -432,16 +432,16 @@ with st.container(height=500, border=False):
         D = gen_shapes.DEFAULTS
 
         st.subheader("Shape mix")
-        n_circles   = st.slider("Circles",   0, 1000, D["n_circles"],   step=10, key="sh_circles")
-        n_triangles = st.slider("Triangles", 0, 1000, D["n_triangles"], step=10, key="sh_triangles")
-        n_squares   = st.slider("Squares",   0, 1000, D["n_squares"],   step=10, key="sh_squares")
+        n_circles   = st.slider("Circles",   0, 3000, D["n_circles"],   step=10, key="sh_circles")
+        n_triangles = st.slider("Triangles", 0, 3000, D["n_triangles"], step=10, key="sh_triangles")
+        n_squares   = st.slider("Squares",   0, 3000, D["n_squares"],   step=10, key="sh_squares")
 
         st.subheader("Size")
         size_median = st.slider(
-            "Size median (px)", 2, 200, int(D["size_median"]), key="sh_size_med",
+            "Size median (px)", 1, 2000, int(D["size_median"]), key="sh_size_med",
         )
         size_spread = st.slider(
-            "Size variation", 0.1, 2.0, D["size_spread"], step=0.05, format="%.2f",
+            "Size variation", 0.1, 3.0, D["size_spread"], step=0.05, format="%.2f",
             key="sh_size_spread",
         )
         rotation = st.slider(
@@ -465,7 +465,7 @@ with st.container(height=500, border=False):
         st.subheader("Style")
         filled = st.toggle("Filled", value=D["filled"], key="sh_filled")
         stroke_w = st.slider(
-            "Stroke width (px)", 0.5, 8.0, D["stroke_width"], step=0.5, key="sh_stroke",
+            "Stroke width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="sh_stroke",
         )
         alpha_min, alpha_max = st.slider(
             "Opacity range (0-255)", 0, 255,
@@ -510,14 +510,14 @@ with st.container(height=500, border=False):
         D = gen_streamlines.DEFAULTS
 
         st.subheader("Flow")
-        n_lines = st.slider("Streams", 10, 500, D["n_lines"], step=10, key="sl_count")
+        n_lines = st.slider("Streams", 1, 1000, D["n_lines"], step=1, key="sl_count")
         n_steps = st.slider(
-            "Steps", 50, 2000, D["n_steps"], step=50,
+            "Steps", 10, 5000, D["n_steps"], step=10,
             help="How far each stream travels. More steps = longer, more winding paths.",
             key="sl_steps",
         )
         step_size = st.slider(
-            "Step size (px)", 1.0, 20.0, D["step_size"], step=0.5, format="%.1f",
+            "Step size (px)", 0.5, 50.0, D["step_size"], step=0.5, format="%.1f",
             help="Distance moved each step. Larger = faster but coarser curves.",
             key="sl_step_size",
         )
@@ -535,7 +535,7 @@ with st.container(height=500, border=False):
         )
 
         st.subheader("Stroke")
-        stroke_width = st.slider("Width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="sl_sw")
+        stroke_width = st.slider("Width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="sl_sw")
         alpha_max = st.slider(
             "Opacity start (0-255)", 0, 255, D["alpha_max"],
             help="Opacity at the start of each stream (freshest ink).",
@@ -551,7 +551,7 @@ with st.container(height=500, border=False):
         D = gen_voronoi.DEFAULTS
 
         st.subheader("Cells")
-        n_cells = st.slider("Cell count", 10, 800, D["n_cells"], step=10, key="vo_count")
+        n_cells = st.slider("Cell count", 1, 3000, D["n_cells"], step=1, key="vo_count")
 
         st.subheader("Noise")
         noise_scale = st.slider(
@@ -568,7 +568,7 @@ with st.container(height=500, border=False):
         st.subheader("Style")
         filled = st.toggle("Filled cells", value=D["filled"],
                            help="Off = outlines only (cracked-earth look).", key="vo_filled")
-        stroke_w = st.slider("Outline width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="vo_stroke")
+        stroke_w = st.slider("Outline width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="vo_stroke")
         alpha_min, alpha_max = st.slider(
             "Opacity range (0-255)", 0, 255,
             (D["alpha_min"], D["alpha_max"]),
@@ -579,10 +579,10 @@ with st.container(height=500, border=False):
         D = gen_cubes.DEFAULTS
 
         st.subheader("Cubes")
-        n_cubes      = st.slider("Count", 20, 1000, D["n_cubes"], step=20, key="cu_count")
-        size_median  = st.slider("Size median (px)", 5, 200, int(D["size_median"]), key="cu_size_med")
+        n_cubes      = st.slider("Count", 1, 2000, D["n_cubes"], step=1, key="cu_count")
+        size_median  = st.slider("Size median (px)", 1, 2000, int(D["size_median"]), key="cu_size_med")
         size_spread  = st.slider(
-            "Size variation", 0.1, 1.5, D["size_spread"], step=0.05, format="%.2f",
+            "Size variation", 0.1, 3.0, D["size_spread"], step=0.05, format="%.2f",
             key="cu_size_spread",
         )
 
@@ -600,7 +600,7 @@ with st.container(height=500, border=False):
 
         st.subheader("Style")
         filled = st.toggle("Filled", value=D["filled"], key="cu_filled")
-        stroke_w = st.slider("Outline width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="cu_stroke")
+        stroke_w = st.slider("Outline width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="cu_stroke")
         alpha_min, alpha_max = st.slider(
             "Opacity range (0-255)", 0, 255,
             (D["alpha_min"], D["alpha_max"]),
@@ -644,27 +644,27 @@ with st.container(height=500, border=False):
             index=0 if D["mode"] == "hypo" else 1,
             key="sp_mode",
         )
-        R_val = st.slider("Outer radius R", 2, 20, int(D["R"]), step=1,
+        R_val = st.slider("Outer radius R", 2, 50, int(D["R"]), step=1,
                           help="Fixed gear radius. Number of petals ≈ R / gcd(R, r).",
                           key="sp_R")
-        r_val = st.slider("Inner radius r", 1, 15, int(D["r"]), step=1,
+        r_val = st.slider("Inner radius r", 1, 30, int(D["r"]), step=1,
                           help="Rolling gear radius. Curve closes after r / gcd(R, r) loops.",
                           key="sp_r")
         d_val = st.slider(
-            "Pen distance d", 0.5, 20.0, float(D["d"]), step=0.5, format="%.1f",
+            "Pen distance d", 0.5, 50.0, float(D["d"]), step=0.5, format="%.1f",
             help="Distance of pen from rolling gear center. d = r gives a classic hypocycloid.",
             key="sp_d",
         )
 
         st.subheader("Trace")
         n_repeats = st.slider(
-            "Repeats", 1, 5, D["n_repeats"], step=1,
+            "Repeats", 1, 10, D["n_repeats"], step=1,
             help="Retrace the closed pattern this many times for a layered, denser look.",
             key="sp_repeats",
         )
 
         st.subheader("Stroke")
-        stroke_width = st.slider("Width (px)", 0.5, 6.0, D["stroke_width"], step=0.5, key="sp_sw")
+        stroke_width = st.slider("Width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="sp_sw")
         sp_alpha_max = st.slider("Opacity start (0-255)", 0, 255, D["alpha_max"],
                                  help="Opacity at the start of the trace.", key="sp_alpha_max")
         sp_alpha_min = st.slider("Opacity end (0-255)", 0, 255, D["alpha_min"],
