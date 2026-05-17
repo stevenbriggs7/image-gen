@@ -10,6 +10,7 @@ import colorsys
 import io
 import random
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 
 import generate as gen_lines
@@ -191,6 +192,25 @@ html, body { height: 100%; overflow: hidden !important; }
     min-height: 0 !important;
     overflow-y: auto !important;
 }
+
+/* Secondary buttons render as underlined text links */
+button[kind="secondary"] {
+    background: transparent !important;
+    border: none !important;
+    color: rgba(255,255,255,0.5) !important;
+    padding: 0 !important;
+    text-decoration: underline !important;
+    text-underline-offset: 3px !important;
+    min-height: unset !important;
+    height: auto !important;
+    font-size: 0.875rem !important;
+    font-weight: normal !important;
+    box-shadow: none !important;
+}
+button[kind="secondary"]:hover {
+    background: transparent !important;
+    color: rgba(255,255,255,0.9) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -244,14 +264,9 @@ with st.container(border=False):
     _SEED_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi", "Cubes"}
     seed = st.session_state.art_seed
     if gen_type in _SEED_TYPES:
-        col_btn, col_val = st.columns([2, 3])
-        with col_btn:
-            if st.button("Randomize", use_container_width=True):
-                st.session_state.art_seed = random.randint(0, 99999)
-                seed = st.session_state.art_seed
-        with col_val:
-            st.write("")
-            st.caption(f"seed {seed}")
+        if st.button("Re-seed"):
+            st.session_state.art_seed = random.randint(0, 99999)
+            seed = st.session_state.art_seed
 
     # ── Lines controls ────────────────────────────────────────────────────────
     if gen_type == "Lines":
@@ -843,10 +858,10 @@ with st.container(border=False):
             on_change=_reroll_colours,
         )
     with col_reroll:
-        st.write("")
-        if st.button("Re-roll", key="shared_reroll", use_container_width=True,
-                     help="Pick new colours within this mood"):
+        st.markdown("<div style='padding-top:1.75rem'>", unsafe_allow_html=True)
+        if st.button("Re-roll", key="shared_reroll"):
             _reroll_colours()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     bg_hex, fg_hex = mood_colors(mood, st.session_state.colour_seed)
 
@@ -860,11 +875,7 @@ with st.container(border=False):
     )
 
     st.divider()
-    col_btn2, col_tip = st.columns([1, 3])
-    with col_btn2:
-        render_full = st.button("Render full resolution", type="primary")
-    with col_tip:
-        st.caption("Preview updates automatically. Render for full-res export.")
+    render_full = st.button("Download full resolution", type="primary")
 
 
 # ── Assemble config ────────────────────────────────────────────────────────────
@@ -1078,14 +1089,8 @@ with st.spinner("Rendering..."):
     preview_bytes = _render_warped(base_bytes, warp_key, preview_scale)
 
 preview_img = Image.open(io.BytesIO(preview_bytes))
-img_placeholder.image(preview_img, use_container_width=True)
-gravity_note = f" · gravity {gravity:.2f}" if gravity > 0 else ""
-warp_note    = f" · warp {warp_cfg['warp_type']}" if warp_cfg["warp_type"] != "none" else ""
-caption_placeholder.caption(
-    f"{_MOOD_LABELS[mood]}  ·  {bg_hex} / {fg_hex}  ·  "
-    f"preview {preview_img.width}×{preview_img.height} px"
-    f"{gravity_note}{warp_note}"
-)
+img_placeholder.image(preview_img, width="stretch")
+caption_placeholder.markdown('<hr style="margin:0;border:none;border-top:1px solid rgba(128,128,128,0.2);">', unsafe_allow_html=True)
 
 # ── Export ─────────────────────────────────────────────────────────────────────
 
@@ -1099,3 +1104,117 @@ if render_full:
         file_name=f"scattered_{label}.png",
         mime="image/png",
     )
+
+# ── Slider direct-entry (double-click or long-press) ──────────────────────────
+
+components.html("""
+<!DOCTYPE html><html><body><script>
+(function(){
+  try {
+    var pd = parent.document;
+    if(parent._svDone) return;
+    parent._svDone = true;
+
+    var lpt = null;
+    var awayHandler = null;
+
+    function setViaReact(thumb, v){
+      var fkey = Object.keys(thumb).find(function(k){
+        return k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance');
+      });
+      if(!fkey) return false;
+      var node = thumb[fkey];
+      while(node){
+        var p = node.memoizedProps;
+        if(p && typeof p.onChange === 'function'){ p.onChange([v]); return true; }
+        node = node.return;
+      }
+      return false;
+    }
+
+    function setViaPointer(thumb, v, min, max){
+      var track = thumb.closest('[data-baseweb="slider"]') || thumb.parentElement;
+      var tr = track.getBoundingClientRect();
+      var fraction = (v - min) / (max - min);
+      var cx = tr.left + fraction * tr.width;
+      var cy = tr.top + tr.height / 2;
+      var target = pd.elementFromPoint(cx, cy) || track;
+      var opts = { bubbles:true, cancelable:true, clientX:cx, clientY:cy, pointerId:1, isPrimary:true };
+      target.dispatchEvent(new PointerEvent('pointerdown', opts));
+      pd.dispatchEvent(new PointerEvent('pointermove', opts));
+      pd.dispatchEvent(new PointerEvent('pointerup', opts));
+    }
+
+    function closeOverlay(){
+      var o = pd.getElementById('__svo');
+      if(o) o.remove();
+      if(awayHandler){ pd.removeEventListener('pointerdown', awayHandler, true); awayHandler=null; }
+    }
+
+    function show(el){
+      var thumb = el.querySelector('[role="slider"]');
+      if(!thumb) return;
+      var min = parseFloat(thumb.getAttribute('aria-valuemin'));
+      var max = parseFloat(thumb.getAttribute('aria-valuemax'));
+      var cur = parseFloat(thumb.getAttribute('aria-valuenow'));
+
+      closeOverlay();
+
+      var tr = thumb.getBoundingClientRect();
+      var ovW = 130;
+      var left = Math.min(Math.max(4, tr.left + tr.width/2 - ovW/2), parent.innerWidth - ovW - 4);
+      var top  = tr.top > 54 ? tr.top - 46 : tr.bottom + 8;
+
+      var ov = pd.createElement('div');
+      ov.id = '__svo';
+      ov.style.cssText = 'position:fixed;left:'+left+'px;top:'+top+'px;background:#1a1a2a;border:1px solid rgba(255,255,255,0.25);border-radius:6px;padding:5px 10px;z-index:2147483647;box-shadow:0 4px 20px rgba(0,0,0,0.6)';
+      var ni = pd.createElement('input');
+      ni.type='number'; ni.value=cur; ni.min=min; ni.max=max;
+      ni.style.cssText='width:110px;background:transparent;border:none;color:white;font-size:0.9rem;outline:none';
+      ov.appendChild(ni);
+      pd.body.appendChild(ov);
+
+      // Delay focus so slider's own handlers finish first
+      setTimeout(function(){ ni.focus(); ni.select(); }, 50);
+
+      function apply(){
+        var v = parseFloat(ni.value);
+        if(isNaN(v)){ closeOverlay(); return; }
+        v = Math.min(max, Math.max(min, v));
+        closeOverlay();
+        if(!setViaReact(thumb, v)) setViaPointer(thumb, v, min, max);
+      }
+
+      ni.addEventListener('keydown', function(e){
+        if(e.key==='Enter'){ apply(); e.preventDefault(); }
+        if(e.key==='Escape'){ closeOverlay(); e.preventDefault(); }
+        e.stopPropagation();
+      }, true);
+
+      // Close on click-away; delay 300ms so this dblclick doesn't immediately trigger it
+      awayHandler = function(e){
+        if(!ov.contains(e.target)) closeOverlay();
+      };
+      setTimeout(function(){
+        if(awayHandler) pd.addEventListener('pointerdown', awayHandler, true);
+      }, 300);
+    }
+
+    pd.addEventListener('dblclick', function(e){
+      var s = e.target.closest('[data-testid="stSlider"]');
+      if(s){ e.preventDefault(); e.stopPropagation(); show(s); }
+    }, true);
+    pd.addEventListener('pointerdown', function(e){
+      var s = e.target.closest('[data-testid="stSlider"]');
+      if(s) lpt = setTimeout(function(){ show(s); }, 650);
+    }, true);
+    function cancel(){ if(lpt){ clearTimeout(lpt); lpt=null; } }
+    pd.addEventListener('pointerup', cancel, true);
+    pd.addEventListener('pointermove', cancel, {passive:true, capture:true});
+
+  } catch(e){
+    console.error('slider-input error:', e);
+  }
+})();
+</script></body></html>
+""", height=0, scrolling=False)
