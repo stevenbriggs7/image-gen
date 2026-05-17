@@ -158,6 +158,13 @@ header[data-testid="stHeader"], footer, #MainMenu,
 
 html, body { height: 100%; overflow: hidden !important; }
 
+/* Suppress rerun flash — prevent stale/loading opacity animations */
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+[data-stale="true"],
+.stale { opacity: 1 !important; transition: none !important; }
+
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"],
 [data-testid="stMainBlockContainer"] {
@@ -221,828 +228,7 @@ if "colour_seed" not in st.session_state:
     st.session_state.colour_seed = random.randint(0, 99999)
 
 
-def _reroll_colours() -> None:
-    st.session_state.colour_seed = random.randint(0, 99999)
-
-
-def _reset_attractor_params() -> None:
-    label = st.session_state.get("at_type", "Clifford")
-    key = label.lower().replace(" ", "").replace("_", "")
-    p = _AT_PARAMS.get(key, _AT_PARAMS["clifford"])
-    for param, sk in [("a", "at_a"), ("b", "at_b"), ("c", "at_c"), ("d", "at_d")]:
-        st.session_state[sk] = float(p[param])
-
-
-img_placeholder     = st.empty()
-caption_placeholder = st.empty()
-
-# ── Controls panel ─────────────────────────────────────────────────────────────
-
-with st.container(border=False):
-
-    # Type picker
-    gen_type = st.radio(
-        "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines", "Voronoi", "Cubes", "Spirograph"],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-
-    st.divider()
-
-    # Seed (shared)
-    defaults = (gen_lines.DEFAULTS          if gen_type == "Lines"
-                else gen_circles.DEFAULTS       if gen_type == "Circles"
-                else gen_wave.DEFAULTS          if gen_type == "Wave"
-                else gen_pendulum.DEFAULTS      if gen_type == "Pendulum"
-                else gen_shapes.DEFAULTS        if gen_type == "Shapes"
-                else gen_attractor.DEFAULTS     if gen_type == "Attractor"
-                else gen_streamlines.DEFAULTS   if gen_type == "Streamlines"
-                else gen_voronoi.DEFAULTS       if gen_type == "Voronoi"
-                else gen_cubes.DEFAULTS         if gen_type == "Cubes"
-                else gen_spirograph.DEFAULTS)
-    # Seed — shown only for generators with random variation
-    _SEED_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi", "Cubes"}
-    seed = st.session_state.art_seed
-    if gen_type in _SEED_TYPES:
-        if st.button("Re-seed"):
-            st.session_state.art_seed = random.randint(0, 99999)
-            seed = st.session_state.art_seed
-
-    # ── Lines controls ────────────────────────────────────────────────────────
-    if gen_type == "Lines":
-        D = gen_lines.DEFAULTS
-
-        st.subheader("Lines")
-        n_lines       = st.slider("Count", 1, 5000, D["n_lines"], step=1, key="l_count")
-        length_median = st.slider("Length median (px)", 1, 2000, int(D["length_median"]), key="l_len_med")
-        length_spread = st.slider(
-            "Length variation", 0.1, 3.0, D["length_spread"], step=0.05, format="%.2f",
-            help="Log-normal spread. 0.1 = uniform, 1.5 = extreme.",
-            key="l_len_spread",
-        )
-
-        st.subheader("Flow Field")
-        noise_scale = st.slider(
-            "Noise scale", 0.0005, 0.025, D["noise_scale"],
-            step=0.0005, format="%.4f",
-            help="Low = sweeping coherent directions. High = chaotic.",
-            key="l_noise_scale",
-        )
-        angle_range = st.slider(
-            "Angle range (x 2pi)", 0.05, 1.0, D["angle_range"],
-            step=0.05, format="%.2f",
-            help="1.0 = any direction; 0.25 = constrained to a quadrant.",
-            key="l_angle_range",
-        )
-
-        st.subheader("Stroke")
-        sw_min, sw_max = st.slider(
-            "Width range (px)", 0.5, 20.0,
-            (D["stroke_width_min"], D["stroke_width_max"]),
-            step=0.5, key="l_sw",
-        )
-        alpha_min, alpha_max = st.slider(
-            "Opacity range (0-255)", 0, 255,
-            (D["alpha_min"], D["alpha_max"]),
-            key="l_alpha",
-        )
-        flow_steps = st.slider(
-            "Curve steps", 1, 50, D["flow_steps"], step=1,
-            help="1 = straight lines. Higher values trace each stroke through the flow field, creating organic curves.",
-            key="l_flow",
-        )
-        invert_overlap = st.toggle(
-            "Invert overlap",
-            value=D["invert_overlap"],
-            help="Each line inverts the tone beneath it. Overlapping lines cancel, creating lattice and moiré effects.",
-            key="l_invert",
-        )
-
-    # ── Circles controls ──────────────────────────────────────────────────────
-    elif gen_type == "Circles":
-        D = gen_circles.DEFAULTS
-
-        st.subheader("Circles")
-        n_circles     = st.slider("Count", 1, 3000, D["n_circles"], step=1, key="c_count")
-        radius_median = st.slider("Radius median (px)", 1, 2000, int(D["radius_median"]), key="c_rad_med")
-        radius_spread = st.slider(
-            "Radius variation", 0.1, 3.0, D["radius_spread"], step=0.05, format="%.2f",
-            help="Log-normal spread. 0.2 = uniform, 1.2 = extreme range.",
-            key="c_rad_spread",
-        )
-
-        st.subheader("Noise Field")
-        noise_scale = st.slider(
-            "Noise scale", 0.0005, 0.025, D["noise_scale"],
-            step=0.0005, format="%.4f",
-            help="Controls the spatial scale of radius clustering.",
-            key="c_noise_scale",
-        )
-        noise_influence = st.slider(
-            "Noise influence", 0.0, 1.5, D["noise_influence"],
-            step=0.05, format="%.2f",
-            help="How strongly the field modulates radius. 0 = pure random.",
-            key="c_noise_inf",
-        )
-
-        st.subheader("Style")
-        filled = st.toggle("Filled discs", value=D["filled"],
-                           help="Off = ring outlines.", key="c_filled")
-        if not filled:
-            stroke_w = st.slider("Ring thickness (px)", 0.5, 20.0, D["stroke_width"],
-                                 step=0.5, key="c_stroke_w")
-        else:
-            stroke_w = D["stroke_width"]
-
-        alpha_min, alpha_max = st.slider(
-            "Opacity range (0-255)", 0, 255,
-            (D["alpha_min"], D["alpha_max"]),
-            key="c_alpha",
-        )
-        invert_overlap = st.toggle(
-            "Invert overlap",
-            value=D["invert_overlap"],
-            help="Each circle inverts the tone beneath it. Overlapping circles cancel, showing the negative at intersections.",
-            key="c_invert",
-        )
-        flow_steps = 1  # not applicable to circles
-
-    # ── Wave controls ─────────────────────────────────────────────────────────
-    elif gen_type == "Wave":
-        D = gen_wave.DEFAULTS
-
-        st.subheader("Wave Lines")
-        n_lines       = st.slider("Count", 1, 3000, D["n_lines"], step=1, key="w_count")
-        length_median = st.slider("Length median (px)", 1, 2000, int(D["length_median"]), key="w_len_med")
-        length_spread = st.slider(
-            "Length variation", 0.1, 3.0, D["length_spread"], step=0.05, format="%.2f",
-            key="w_len_spread",
-        )
-
-        st.subheader("Wave Shape")
-        wave_amplitude = st.slider(
-            "Amplitude", 0.0, 0.5, D["wave_amplitude"], step=0.01, format="%.2f",
-            help="Height of the wave as a fraction of canvas height.",
-            key="w_amp",
-        )
-        wave_frequency = st.slider(
-            "Frequency", 0.1, 20.0, D["wave_frequency"], step=0.1, format="%.2f",
-            help="Number of complete cycles across the canvas width.",
-            key="w_freq",
-        )
-        wave_phase = st.slider(
-            "Phase", 0.0, 1.0, D["wave_phase"], step=0.05, format="%.2f",
-            help="Shifts the wave left or right (0–1 wraps once around).",
-            key="w_phase",
-        )
-        wave_angle = st.slider(
-            "Wave angle (°)", 0, 180, int(D["wave_angle"]), step=5,
-            help="Direction the wave travels. 0° = horizontal, 90° = vertical.",
-            key="w_angle",
-        )
-
-        st.subheader("Wave Influence")
-        line_scatter = st.slider(
-            "Scatter", 0.0, 0.4, D["line_scatter"], step=0.01, format="%.2f",
-            help="Spread line centres off the wave. 0 = all centres exactly on the wave.",
-            key="w_scatter",
-        )
-        angle_spread = st.slider(
-            "Angle variation", 0.0, 1.5, D["angle_spread"], step=0.05, format="%.2f",
-            help="Angular randomness around the perpendicular (radians). 0 = all lines parallel.",
-            key="w_angle_spread",
-        )
-
-        st.subheader("Stroke")
-        sw_min, sw_max = st.slider(
-            "Width range (px)", 0.5, 20.0,
-            (D["stroke_width_min"], D["stroke_width_max"]),
-            step=0.5, key="w_sw",
-        )
-        alpha_min, alpha_max = st.slider(
-            "Opacity range (0-255)", 0, 255,
-            (D["alpha_min"], D["alpha_max"]),
-            key="w_alpha",
-        )
-        invert_overlap = st.toggle(
-            "Invert overlap", value=D["invert_overlap"],
-            help="Each line inverts the tone beneath it.",
-            key="w_invert",
-        )
-        flow_steps = 1  # not applicable
-
-    elif gen_type == "Pendulum":
-        D = gen_pendulum.DEFAULTS
-
-        st.subheader("Pendulum")
-        precession = st.slider(
-            "Precession", 0.01, 0.5, D["precession"], step=0.01, format="%.2f",
-            help="How fast the orbit rotates. Lower = more petals (≈1/value). 0.1 → ~10 petals, 0.33 → ~3.",
-            key="p_prec",
-        )
-        aspect = st.slider(
-            "Shape", 0.1, 1.0, D["aspect"], step=0.05, format="%.2f",
-            help="1.0 = circular orbit, lower = squashed — makes petals more elongated.",
-            key="p_aspect",
-        )
-        phase = st.slider(
-            "Phase", 0.0, 1.0, D["phase"], step=0.05, format="%.2f",
-            help="Starting offset between x and y. 0.25 = circular start, 0 = straight-line start.",
-            key="p_phase",
-        )
-        amplitude = st.slider(
-            "Amplitude", 0.3, 1.0, D["amplitude"], step=0.05, format="%.2f",
-            help="Initial swing size as a fraction of the canvas.",
-            key="p_amp",
-        )
-
-        st.subheader("Paint")
-        damping = st.slider(
-            "Damping", 0.0001, 0.002, D["damping"], step=0.0001, format="%.4f",
-            help="How quickly the swing decays — tighter spiral at higher values.",
-            key="p_damp",
-        )
-        n_steps = st.slider(
-            "Steps", 1, 50000, min(D["n_steps"], 50000), step=100,
-            help="Simulation length — more steps draw more loops of the pattern.",
-            key="p_steps",
-        )
-        flow_rate = st.slider(
-            "Flow rate", 0.0, 2.0, D["flow_rate"], step=0.1, format="%.1f",
-            help="How quickly opacity fades as the pot empties. 0=constant ink.",
-            key="p_flow",
-        )
-
-        st.subheader("Stroke")
-        stroke_width = st.slider(
-            "Width (px)", 0.5, 20.0, D["stroke_width"], step=0.5,
-            key="p_sw",
-        )
-        p_alpha_max = st.slider(
-            "Opacity start (0-255)", 0, 255, D["alpha_max"],
-            help="Opacity at the beginning of the trace.",
-            key="p_alpha_max",
-        )
-        p_alpha_min = st.slider(
-            "Opacity end (0-255)", 0, 255, D["alpha_min"],
-            help="Opacity at the end of the trace (pot nearly empty).",
-            key="p_alpha_min",
-        )
-
-    elif gen_type == "Shapes":
-        D = gen_shapes.DEFAULTS
-
-        st.subheader("Shape mix")
-        n_circles   = st.slider("Circles",   0, 3000, D["n_circles"],   step=10, key="sh_circles")
-        n_triangles = st.slider("Triangles", 0, 3000, D["n_triangles"], step=10, key="sh_triangles")
-        n_squares   = st.slider("Squares",   0, 3000, D["n_squares"],   step=10, key="sh_squares")
-
-        st.subheader("Size")
-        size_median = st.slider(
-            "Size median (px)", 1, 2000, int(D["size_median"]), key="sh_size_med",
-        )
-        size_spread = st.slider(
-            "Size variation", 0.1, 3.0, D["size_spread"], step=0.05, format="%.2f",
-            key="sh_size_spread",
-        )
-        rotation = st.slider(
-            "Rotation", 0.0, 1.0, D["rotation"], step=0.05, format="%.2f",
-            help="0 = all axis-aligned, 1 = fully random per-shape rotation.",
-            key="sh_rotation",
-        )
-
-        st.subheader("Noise")
-        noise_scale = st.slider(
-            "Noise scale", 0.001, 0.02, D["noise_scale"], step=0.001, format="%.3f",
-            help="Spatial frequency of the size-modulation field.",
-            key="sh_noise_scale",
-        )
-        noise_influence = st.slider(
-            "Noise influence", 0.0, 1.0, D["noise_influence"], step=0.05, format="%.2f",
-            help="How strongly noise modulates size. 0 = pure log-normal.",
-            key="sh_noise_inf",
-        )
-
-        st.subheader("Style")
-        filled = st.toggle("Filled", value=D["filled"], key="sh_filled")
-        stroke_w = st.slider(
-            "Stroke width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="sh_stroke",
-        )
-        alpha_min, alpha_max = st.slider(
-            "Opacity range (0-255)", 0, 255,
-            (D["alpha_min"], D["alpha_max"]),
-            key="sh_alpha",
-        )
-        invert_overlap = st.toggle(
-            "Invert overlap", value=D["invert_overlap"],
-            help="Each shape inverts the tone beneath it.",
-            key="sh_invert",
-        )
-
-    elif gen_type == "Attractor":
-        D = gen_attractor.DEFAULTS
-
-        st.subheader("Attractor")
-        attractor_type = st.selectbox(
-            "Type", ["Clifford", "De Jong", "Svensson", "Ikeda", "Hopalong"],
-            index=["clifford", "dejong", "svensson", "ikeda", "hopalong"].index(D["attractor"]),
-            key="at_type",
-            on_change=_reset_attractor_params,
-        )
-        n_iter = st.slider(
-            "Iterations", 500_000, 8_000_000, D["n_iter"], step=500_000,
-            help="More iterations = denser, smoother pattern. Scales down automatically for previews.",
-            key="at_iter",
-        )
-
-        _at_kind = attractor_type.lower().replace(" ", "").replace("_", "")
-        _ik = _AT_PARAMS["ikeda"]
-        st.subheader("Parameters")
-        if _at_kind == "ikeda":
-            # Ikeda is intrinsically 1-param; b/c/d use canonical values that keep the map chaotic
-            a = st.slider("a  (= u)", 0.68, 0.90, _ik["a"], step=0.01, format="%.2f", key="at_a",
-                          help="Contraction ratio — entire range produces chaotic spirals.")
-            b, c, d = _ik["b"], _ik["c"], _ik["d"]
-        else:
-            a = st.slider("a", -3.0, 3.0, D["a"], step=0.05, format="%.2f", key="at_a")
-            b = st.slider("b", -3.0, 3.0, D["b"], step=0.05, format="%.2f", key="at_b")
-            c = st.slider("c", -3.0, 3.0, D["c"], step=0.05, format="%.2f", key="at_c")
-            d = st.slider("d", -3.0, 3.0, D["d"], step=0.05, format="%.2f", key="at_d",
-                          help="Not used by Hopalong." if _at_kind == "hopalong" else None)
-
-        st.subheader("Tone")
-        gamma = st.slider(
-            "Gamma", 0.1, 2.0, D["gamma"], step=0.05, format="%.2f",
-            help="< 1 brightens midtones (dusty), > 1 darkens them (high-contrast).",
-            key="at_gamma",
-        )
-
-    elif gen_type == "Streamlines":
-        D = gen_streamlines.DEFAULTS
-
-        st.subheader("Flow")
-        n_lines = st.slider("Streams", 1, 1000, D["n_lines"], step=1, key="sl_count")
-        n_steps = st.slider(
-            "Steps", 10, 5000, D["n_steps"], step=10,
-            help="How far each stream travels. More steps = longer, more winding paths.",
-            key="sl_steps",
-        )
-        step_size = st.slider(
-            "Step size (px)", 0.5, 50.0, D["step_size"], step=0.5, format="%.1f",
-            help="Distance moved each step. Larger = faster but coarser curves.",
-            key="sl_step_size",
-        )
-
-        st.subheader("Field")
-        noise_scale = st.slider(
-            "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
-            help="Low = sweeping river-like paths. High = chaotic turbulence.",
-            key="sl_noise_scale",
-        )
-        angle_range = st.slider(
-            "Angle range (x 2pi)", 0.05, 1.0, D["angle_range"], step=0.05, format="%.2f",
-            help="1.0 = any direction; 0.25 = constrained to a quadrant.",
-            key="sl_angle_range",
-        )
-
-        st.subheader("Stroke")
-        stroke_width = st.slider("Width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="sl_sw")
-        alpha_max = st.slider(
-            "Opacity start (0-255)", 0, 255, D["alpha_max"],
-            help="Opacity at the start of each stream (freshest ink).",
-            key="sl_alpha_max",
-        )
-        alpha_min = st.slider(
-            "Opacity end (0-255)", 0, 255, D["alpha_min"],
-            help="Opacity at the end of each stream (ink thinning).",
-            key="sl_alpha_min",
-        )
-
-    elif gen_type == "Voronoi":
-        D = gen_voronoi.DEFAULTS
-
-        st.subheader("Cells")
-        n_cells = st.slider("Cell count", 1, 3000, D["n_cells"], step=1, key="vo_count")
-
-        st.subheader("Noise")
-        noise_scale = st.slider(
-            "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
-            help="Spatial scale of the density field. Low = large blobs, high = fine grain.",
-            key="vo_noise_scale",
-        )
-        noise_influence = st.slider(
-            "Noise influence", 0.0, 1.5, D["noise_influence"], step=0.05, format="%.2f",
-            help="How strongly the field modulates cell shading. 0 = uniform.",
-            key="vo_noise_inf",
-        )
-
-        st.subheader("Style")
-        filled = st.toggle("Filled cells", value=D["filled"],
-                           help="Off = outlines only (cracked-earth look).", key="vo_filled")
-        stroke_w = st.slider("Outline width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="vo_stroke")
-        alpha_min, alpha_max = st.slider(
-            "Opacity range (0-255)", 0, 255,
-            (D["alpha_min"], D["alpha_max"]),
-            key="vo_alpha",
-        )
-
-    elif gen_type == "Cubes":
-        D = gen_cubes.DEFAULTS
-
-        st.subheader("Cubes")
-        n_cubes      = st.slider("Count", 1, 2000, D["n_cubes"], step=1, key="cu_count")
-        size_median  = st.slider("Size median (px)", 1, 2000, int(D["size_median"]), key="cu_size_med")
-        size_spread  = st.slider(
-            "Size variation", 0.1, 3.0, D["size_spread"], step=0.05, format="%.2f",
-            key="cu_size_spread",
-        )
-
-        st.subheader("Noise")
-        noise_scale = st.slider(
-            "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
-            help="Spatial scale of size clustering. Low = large blobs, high = fine grain.",
-            key="cu_noise_scale",
-        )
-        noise_influence = st.slider(
-            "Noise influence", 0.0, 1.5, D["noise_influence"], step=0.05, format="%.2f",
-            help="How strongly noise modulates cube size. 0 = pure random.",
-            key="cu_noise_inf",
-        )
-
-        st.subheader("Style")
-        filled = st.toggle("Filled", value=D["filled"], key="cu_filled")
-        stroke_w = st.slider("Outline width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="cu_stroke")
-        alpha_min, alpha_max = st.slider(
-            "Opacity range (0-255)", 0, 255,
-            (D["alpha_min"], D["alpha_max"]),
-            key="cu_alpha",
-        )
-        shade_contrast = st.slider(
-            "Shade contrast", 0.0, 1.0, D["shade_contrast"], step=0.05, format="%.2f",
-            help="How different the three face shades are. 0 = flat, 1 = strong light/shadow.",
-            key="cu_shade",
-        )
-
-        st.subheader("Warp")
-        cu_warp_label = st.selectbox(
-            "Warp type", ["None", "Wave", "Sphere"],
-            index=0,
-            help="Displaces each vertex by an invisible field, bending the cube faces.",
-            key="cu_warp_type",
-        )
-        warp_type = cu_warp_label.lower()
-        if warp_type != "none":
-            warp_amplitude = st.slider(
-                "Warp amplitude", 0.0, 1.0, D["warp_amplitude"], step=0.05, format="%.2f",
-                help="Displacement strength as a fraction of cube size.",
-                key="cu_warp_amp",
-            )
-            warp_scale = st.slider(
-                "Warp scale", 0.001, 0.02, D["warp_scale"], step=0.001, format="%.3f",
-                help="Wave: spatial frequency. Sphere: falloff rate from canvas centre.",
-                key="cu_warp_scale",
-            )
-        else:
-            warp_amplitude = 0.0
-            warp_scale = D["warp_scale"]
-
-    elif gen_type == "Spirograph":
-        D = gen_spirograph.DEFAULTS
-
-        st.subheader("Gears")
-        spiro_mode = st.selectbox(
-            "Type", ["Hypo (inner rolling)", "Epi (outer rolling)"],
-            index=0 if D["mode"] == "hypo" else 1,
-            key="sp_mode",
-        )
-        R_val = st.slider("Outer radius R", 2, 50, int(D["R"]), step=1,
-                          help="Fixed gear radius. Number of petals ≈ R / gcd(R, r).",
-                          key="sp_R")
-        r_val = st.slider("Inner radius r", 1, 30, int(D["r"]), step=1,
-                          help="Rolling gear radius. Curve closes after r / gcd(R, r) loops.",
-                          key="sp_r")
-        d_val = st.slider(
-            "Pen distance d", 0.5, 50.0, float(D["d"]), step=0.5, format="%.1f",
-            help="Distance of pen from rolling gear center. d = r gives a classic hypocycloid.",
-            key="sp_d",
-        )
-
-        st.subheader("Trace")
-        n_repeats = st.slider(
-            "Repeats", 1, 10, D["n_repeats"], step=1,
-            help="Retrace the closed pattern this many times for a layered, denser look.",
-            key="sp_repeats",
-        )
-
-        st.subheader("Stroke")
-        stroke_width = st.slider("Width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="sp_sw")
-        sp_alpha_max = st.slider("Opacity start (0-255)", 0, 255, D["alpha_max"],
-                                 help="Opacity at the start of the trace.", key="sp_alpha_max")
-        sp_alpha_min = st.slider("Opacity end (0-255)", 0, 255, D["alpha_min"],
-                                 help="Opacity at the end of the trace.", key="sp_alpha_min")
-
-    # ── Stroke Character (shared, stroke-based generators only) ──────────────
-    _STROKE_TYPES = {"Lines", "Wave", "Streamlines", "Pendulum", "Spirograph"}
-    if gen_type in _STROKE_TYPES:
-        st.subheader("Stroke Character")
-        stroke_taper = st.slider(
-            "End taper", 0.0, 1.0, float(defaults.get("stroke_taper", 0.0)),
-            step=0.05, key="sc_taper",
-            help="Narrows stroke width at both ends of each stroke.",
-        )
-        stroke_width_var = st.slider(
-            "Width variation", 0.0, 1.0, float(defaults.get("stroke_width_var", 0.0)),
-            step=0.05, key="sc_wvar",
-            help="Random per-stroke width jitter for a hand-drawn rhythm.",
-        )
-        stroke_break_density = st.slider(
-            "Break density", 0.0, 1.0, float(defaults.get("stroke_break_density", 0.0)),
-            step=0.02, key="sc_break",
-            help="Fraction of strokes/segments randomly omitted (dry-brush gaps).",
-        )
-        stroke_roughness = st.slider(
-            "Roughness", 0.0, 5.0, float(defaults.get("stroke_roughness", 0.0)),
-            step=0.1, key="sc_rough",
-            help="Perpendicular wobble amplitude (× stroke width) for hand-tremor feel.",
-        )
-    else:
-        stroke_taper = stroke_width_var = stroke_break_density = stroke_roughness = 0.0
-
-    # ── Composition (shared) ──────────────────────────────────────────────────
-    st.subheader("Composition")
-    margin = st.slider(
-        "Edge margin", 0.0, 0.45, defaults["margin"],
-        step=0.01, format="%.2f",
-        help="Fraction of the image to leave empty at each edge.",
-        key="shared_margin",
-    )
-    _GRAVITY_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi", "Cubes"}
-    if gen_type in _GRAVITY_TYPES:
-        gravity = st.slider(
-            "Gravity strength", 0.0, 0.95, defaults["gravity"],
-            step=0.05, format="%.2f",
-            help="How strongly marks are pulled toward the centre.",
-            key="shared_gravity",
-        )
-        gravity_falloff = st.slider(
-            "Gravity falloff", 0.0, 1.0, defaults["gravity_falloff"],
-            step=0.05, format="%.2f",
-            help="How quickly gravity weakens with distance. 0 = uniform pull everywhere, 1 = only nearby marks affected.",
-            key="shared_gravity_falloff",
-        )
-    else:
-        gravity = gravity_falloff = 0.0
-
-    # ── Warp field (shared) ───────────────────────────────────────────────────
-    st.subheader("Warp")
-    warp_type = st.selectbox(
-        "Type", ["None", "Noise", "Swirl", "Ripple", "Radial"],
-        key="w_type",
-    ).lower()
-    if warp_type != "none":
-        warp_strength = st.slider(
-            "Strength", 0, 300,
-            int(gen_warp.DEFAULTS["strength"]),
-            step=1, key="w_strength",
-            help="Maximum pixel displacement (Noise / Ripple / Swirl) or lens scale (Radial).",
-        )
-        if warp_type == "noise":
-            warp_noise_scale = st.slider(
-                "Field scale", 0.001, 0.015,
-                gen_warp.DEFAULTS["noise_scale"],
-                step=0.001, format="%.3f", key="w_ns",
-                help="Spatial scale of the noise pattern. Lower = larger blobs.",
-            )
-            warp_seed = st.number_input("Seed", 0, 99999, gen_warp.DEFAULTS["seed"], key="w_seed")
-        elif warp_type == "swirl":
-            warp_falloff = st.slider(
-                "Falloff", 0.0, 1.0, gen_warp.DEFAULTS["falloff"],
-                step=0.05, format="%.2f", key="w_falloff",
-                help="0 = hard vortex edge, 1 = very gradual fade to zero.",
-            )
-        elif warp_type == "ripple":
-            warp_frequency = st.slider(
-                "Frequency", 0.5, 20.0, gen_warp.DEFAULTS["frequency"],
-                step=0.5, format="%.1f", key="w_freq",
-                help="Number of wave cycles across the short canvas edge.",
-            )
-            warp_angle = st.slider(
-                "Direction", 0, 360, int(gen_warp.DEFAULTS["angle"]),
-                step=5, key="w_angle",
-                help="Wave propagation direction in degrees.",
-            )
-        # Radial: strength alone controls barrel (<0) vs pincushion (>0) intensity
-    else:
-        warp_strength = warp_noise_scale = warp_seed = 0
-        warp_falloff = warp_frequency = warp_angle = 0
-
-    warp_cfg = {
-        "warp_type":  warp_type,
-        "strength":   float(warp_strength) if warp_type != "none" else 0.0,
-        "noise_scale": float(warp_noise_scale) if warp_type == "noise" else gen_warp.DEFAULTS["noise_scale"],
-        "seed":        int(warp_seed)       if warp_type == "noise" else gen_warp.DEFAULTS["seed"],
-        "falloff":     float(warp_falloff)  if warp_type == "swirl"  else gen_warp.DEFAULTS["falloff"],
-        "frequency":   float(warp_frequency) if warp_type == "ripple" else gen_warp.DEFAULTS["frequency"],
-        "angle":       float(warp_angle)    if warp_type == "ripple" else gen_warp.DEFAULTS["angle"],
-    }
-
-    # ── Mood / Color & Output (shared) ────────────────────────────────────────
-    st.subheader("Mood & Output")
-    col_mood, col_reroll = st.columns([3, 1])
-    with col_mood:
-        mood = st.selectbox(
-            "Mood",
-            list(_MOOD_LABELS.keys()),
-            format_func=_MOOD_LABELS.get,
-            key="shared_mood",
-            on_change=_reroll_colours,
-        )
-    with col_reroll:
-        st.markdown("<div style='padding-top:1.75rem'>", unsafe_allow_html=True)
-        if st.button("Re-roll", key="shared_reroll"):
-            _reroll_colours()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    bg_hex, fg_hex = mood_colors(mood, st.session_state.colour_seed)
-
-    out_w = st.select_slider(
-        "Width (px)", [400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
-        value=2000, key="shared_out_w",
-    )
-    out_h = st.select_slider(
-        "Height (px)", [300, 400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
-        value=2000, key="shared_out_h",
-    )
-
-    st.divider()
-    render_full = st.button("Download full resolution", type="primary")
-
-
-# ── Assemble config ────────────────────────────────────────────────────────────
-
-if gen_type == "Lines":
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "n_lines": n_lines,
-        "noise_scale": noise_scale, "angle_range": angle_range,
-        "length_median": float(length_median), "length_spread": float(length_spread),
-        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
-        "stroke_width_min": sw_min, "stroke_width_max": sw_max,
-        "alpha_min": alpha_min, "alpha_max": alpha_max,
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-        "flow_steps": flow_steps,
-        "invert_overlap": invert_overlap,
-        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
-        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
-    }
-    label = "lines"
-elif gen_type == "Wave":
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "n_lines": n_lines,
-        "wave_amplitude": float(wave_amplitude),
-        "wave_frequency": float(wave_frequency),
-        "wave_phase": float(wave_phase),
-        "wave_angle": float(wave_angle),
-        "line_scatter": float(line_scatter),
-        "angle_spread": float(angle_spread),
-        "length_median": float(length_median), "length_spread": float(length_spread),
-        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
-        "stroke_width_min": sw_min, "stroke_width_max": sw_max,
-        "alpha_min": alpha_min, "alpha_max": alpha_max,
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-        "invert_overlap": invert_overlap,
-        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
-        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
-    }
-    label = "wave"
-elif gen_type == "Pendulum":
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "precession": float(precession),
-        "aspect": float(aspect),
-        "phase": float(phase),
-        "damping": float(damping),
-        "n_steps": int(n_steps),
-        "amplitude": float(amplitude),
-        "flow_rate": float(flow_rate),
-        "stroke_width": float(stroke_width),
-        "alpha_max": int(p_alpha_max),
-        "alpha_min": int(p_alpha_min),
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
-        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
-    }
-    label = "pendulum"
-elif gen_type == "Shapes":
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "n_circles": int(n_circles), "n_triangles": int(n_triangles), "n_squares": int(n_squares),
-        "size_median": float(size_median), "size_spread": float(size_spread),
-        "rotation": float(rotation),
-        "noise_scale": float(noise_scale), "noise_influence": float(noise_influence),
-        "filled": filled, "stroke_width": float(stroke_w),
-        "alpha_min": int(alpha_min), "alpha_max": int(alpha_max),
-        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-        "invert_overlap": invert_overlap,
-    }
-    label = "shapes"
-elif gen_type == "Attractor":
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "attractor": attractor_type.lower().replace(" ", ""),
-        "a": float(a), "b": float(b), "c": float(c), "d": float(d),
-        "n_iter": int(n_iter),
-        "gamma": float(gamma),
-        "margin": 0.0, "gravity": 0.0, "gravity_falloff": 0.0,
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-    }
-    label = "attractor"
-elif gen_type == "Streamlines":
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "n_lines": int(n_lines),
-        "n_steps": int(n_steps),
-        "step_size": float(step_size),
-        "noise_scale": float(noise_scale),
-        "angle_range": float(angle_range),
-        "stroke_width": float(stroke_width),
-        "alpha_max": int(alpha_max),
-        "alpha_min": int(alpha_min),
-        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
-        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
-    }
-    label = "streamlines"
-elif gen_type == "Voronoi":
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "n_cells": int(n_cells),
-        "noise_scale": float(noise_scale),
-        "noise_influence": float(noise_influence),
-        "filled": filled,
-        "stroke_width": float(stroke_w),
-        "alpha_min": int(alpha_min), "alpha_max": int(alpha_max),
-        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-    }
-    label = "voronoi"
-elif gen_type == "Cubes":
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "n_cubes": int(n_cubes),
-        "size_median": float(size_median), "size_spread": float(size_spread),
-        "noise_scale": float(noise_scale), "noise_influence": float(noise_influence),
-        "filled": filled, "stroke_width": float(stroke_w),
-        "alpha_min": int(alpha_min), "alpha_max": int(alpha_max),
-        "shade_contrast": float(shade_contrast),
-        "warp_type": warp_type, "warp_amplitude": float(warp_amplitude), "warp_scale": float(warp_scale),
-        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-    }
-    label = "cubes"
-elif gen_type == "Spirograph":
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "R": int(R_val), "r": int(r_val), "d": float(d_val),
-        "mode": "hypo" if spiro_mode.startswith("Hypo") else "epi",
-        "n_repeats": int(n_repeats),
-        "stroke_width": float(stroke_width),
-        "alpha_max": int(sp_alpha_max), "alpha_min": int(sp_alpha_min),
-        "margin": float(margin), "gravity": 0.0, "gravity_falloff": 0.0,
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-        "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
-        "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
-    }
-    label = "spirograph"
-else:
-    config = {
-        "seed": int(seed),
-        "output_width": out_w, "output_height": out_h,
-        "n_circles": n_circles,
-        "noise_scale": noise_scale, "noise_influence": float(noise_influence),
-        "radius_median": float(radius_median), "radius_spread": float(radius_spread),
-        "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
-        "filled": filled, "stroke_width": stroke_w,
-        "alpha_min": alpha_min, "alpha_max": alpha_max,
-        "bg_hex": bg_hex, "fg_hex": fg_hex,
-        "invert_overlap": invert_overlap,
-    }
-    label = "circles"
-
-
-# ── Cached generation ──────────────────────────────────────────────────────────
+# ── Cached generation (module-level so @st.fragment reruns don't redefine them) ─
 
 @st.cache_data(max_entries=40, show_spinner=False)
 def _render_base(gen_type: str, cfg_key: tuple, scale: float) -> bytes:
@@ -1077,144 +263,987 @@ def _cfg_key(cfg: dict) -> tuple:
     return tuple(x for pair in sorted(cfg.items()) for x in pair)
 
 
-# ── Render preview ─────────────────────────────────────────────────────────────
+# Image placeholders at module level so they stay OUTSIDE the fragment wrapper
+# and the existing flex/overflow CSS selectors keep working.
+img_placeholder     = st.empty()
+caption_placeholder = st.empty()
 
-PREVIEW_MAX_W = 900
-preview_scale = min(PREVIEW_MAX_W / out_w, 1.0)
-key      = _cfg_key(config)
-warp_key = _cfg_key(warp_cfg)
+# ── UI (fragment: only reruns on widget change, not the full script) ────────────
 
-with st.spinner("Rendering..."):
+@st.fragment
+def _main_ui() -> None:
+
+    def _reroll_colours() -> None:
+        st.session_state.colour_seed = random.randint(0, 99999)
+
+    def _reset_attractor_params() -> None:
+        label = st.session_state.get("at_type", "Clifford")
+        key = label.lower().replace(" ", "").replace("_", "")
+        p = _AT_PARAMS.get(key, _AT_PARAMS["clifford"])
+        for param, sk in [("a", "at_a"), ("b", "at_b"), ("c", "at_c"), ("d", "at_d")]:
+            st.session_state[sk] = float(p[param])
+
+    # ── Controls panel ─────────────────────────────────────────────────────────────
+
+    with st.container(border=False):
+
+        # Type picker
+        gen_type = st.radio(
+            "Type", ["Lines", "Circles", "Wave", "Pendulum", "Shapes", "Attractor", "Streamlines", "Voronoi", "Cubes", "Spirograph"],
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+
+        st.divider()
+
+        # Seed (shared)
+        defaults = (gen_lines.DEFAULTS          if gen_type == "Lines"
+                    else gen_circles.DEFAULTS       if gen_type == "Circles"
+                    else gen_wave.DEFAULTS          if gen_type == "Wave"
+                    else gen_pendulum.DEFAULTS      if gen_type == "Pendulum"
+                    else gen_shapes.DEFAULTS        if gen_type == "Shapes"
+                    else gen_attractor.DEFAULTS     if gen_type == "Attractor"
+                    else gen_streamlines.DEFAULTS   if gen_type == "Streamlines"
+                    else gen_voronoi.DEFAULTS       if gen_type == "Voronoi"
+                    else gen_cubes.DEFAULTS         if gen_type == "Cubes"
+                    else gen_spirograph.DEFAULTS)
+        # Seed — shown only for generators with random variation
+        _SEED_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi", "Cubes"}
+        seed = st.session_state.art_seed
+        if gen_type in _SEED_TYPES:
+            if st.button("Re-seed"):
+                st.session_state.art_seed = random.randint(0, 99999)
+                seed = st.session_state.art_seed
+
+        # ── Lines controls ────────────────────────────────────────────────────────
+        if gen_type == "Lines":
+            D = gen_lines.DEFAULTS
+
+            st.subheader("Lines")
+            n_lines       = st.slider("Count", 1, 5000, D["n_lines"], step=1, key="l_count")
+            length_median = st.slider("Length median (px)", 1, 2000, int(D["length_median"]), key="l_len_med")
+            length_spread = st.slider(
+                "Length variation", 0.1, 3.0, D["length_spread"], step=0.05, format="%.2f",
+                help="Log-normal spread. 0.1 = uniform, 1.5 = extreme.",
+                key="l_len_spread",
+            )
+
+            st.subheader("Flow Field")
+            noise_scale = st.slider(
+                "Noise scale", 0.0005, 0.025, D["noise_scale"],
+                step=0.0005, format="%.4f",
+                help="Low = sweeping coherent directions. High = chaotic.",
+                key="l_noise_scale",
+            )
+            angle_range = st.slider(
+                "Angle range (x 2pi)", 0.05, 1.0, D["angle_range"],
+                step=0.05, format="%.2f",
+                help="1.0 = any direction; 0.25 = constrained to a quadrant.",
+                key="l_angle_range",
+            )
+
+            st.subheader("Stroke")
+            sw_min, sw_max = st.slider(
+                "Width range (px)", 0.5, 20.0,
+                (D["stroke_width_min"], D["stroke_width_max"]),
+                step=0.5, key="l_sw",
+            )
+            alpha_min, alpha_max = st.slider(
+                "Opacity range (0-255)", 0, 255,
+                (D["alpha_min"], D["alpha_max"]),
+                key="l_alpha",
+            )
+            flow_steps = st.slider(
+                "Curve steps", 1, 50, D["flow_steps"], step=1,
+                help="1 = straight lines. Higher values trace each stroke through the flow field, creating organic curves.",
+                key="l_flow",
+            )
+            invert_overlap = st.toggle(
+                "Invert overlap",
+                value=D["invert_overlap"],
+                help="Each line inverts the tone beneath it. Overlapping lines cancel, creating lattice and moiré effects.",
+                key="l_invert",
+            )
+
+        # ── Circles controls ──────────────────────────────────────────────────────
+        elif gen_type == "Circles":
+            D = gen_circles.DEFAULTS
+
+            st.subheader("Circles")
+            n_circles     = st.slider("Count", 1, 3000, D["n_circles"], step=1, key="c_count")
+            radius_median = st.slider("Radius median (px)", 1, 2000, int(D["radius_median"]), key="c_rad_med")
+            radius_spread = st.slider(
+                "Radius variation", 0.1, 3.0, D["radius_spread"], step=0.05, format="%.2f",
+                help="Log-normal spread. 0.2 = uniform, 1.2 = extreme range.",
+                key="c_rad_spread",
+            )
+
+            st.subheader("Noise Field")
+            noise_scale = st.slider(
+                "Noise scale", 0.0005, 0.025, D["noise_scale"],
+                step=0.0005, format="%.4f",
+                help="Controls the spatial scale of radius clustering.",
+                key="c_noise_scale",
+            )
+            noise_influence = st.slider(
+                "Noise influence", 0.0, 1.5, D["noise_influence"],
+                step=0.05, format="%.2f",
+                help="How strongly the field modulates radius. 0 = pure random.",
+                key="c_noise_inf",
+            )
+
+            st.subheader("Style")
+            filled = st.toggle("Filled discs", value=D["filled"],
+                               help="Off = ring outlines.", key="c_filled")
+            if not filled:
+                stroke_w = st.slider("Ring thickness (px)", 0.5, 20.0, D["stroke_width"],
+                                     step=0.5, key="c_stroke_w")
+            else:
+                stroke_w = D["stroke_width"]
+
+            alpha_min, alpha_max = st.slider(
+                "Opacity range (0-255)", 0, 255,
+                (D["alpha_min"], D["alpha_max"]),
+                key="c_alpha",
+            )
+            invert_overlap = st.toggle(
+                "Invert overlap",
+                value=D["invert_overlap"],
+                help="Each circle inverts the tone beneath it. Overlapping circles cancel, showing the negative at intersections.",
+                key="c_invert",
+            )
+            flow_steps = 1  # not applicable to circles
+
+        # ── Wave controls ─────────────────────────────────────────────────────────
+        elif gen_type == "Wave":
+            D = gen_wave.DEFAULTS
+
+            st.subheader("Wave Lines")
+            n_lines       = st.slider("Count", 1, 3000, D["n_lines"], step=1, key="w_count")
+            length_median = st.slider("Length median (px)", 1, 2000, int(D["length_median"]), key="w_len_med")
+            length_spread = st.slider(
+                "Length variation", 0.1, 3.0, D["length_spread"], step=0.05, format="%.2f",
+                key="w_len_spread",
+            )
+
+            st.subheader("Wave Shape")
+            wave_amplitude = st.slider(
+                "Amplitude", 0.0, 0.5, D["wave_amplitude"], step=0.01, format="%.2f",
+                help="Height of the wave as a fraction of canvas height.",
+                key="w_amp",
+            )
+            wave_frequency = st.slider(
+                "Frequency", 0.1, 20.0, D["wave_frequency"], step=0.1, format="%.2f",
+                help="Number of complete cycles across the canvas width.",
+                key="w_freq",
+            )
+            wave_phase = st.slider(
+                "Phase", 0.0, 1.0, D["wave_phase"], step=0.05, format="%.2f",
+                help="Shifts the wave left or right (0–1 wraps once around).",
+                key="w_phase",
+            )
+            wave_angle = st.slider(
+                "Wave angle (°)", 0, 180, int(D["wave_angle"]), step=5,
+                help="Direction the wave travels. 0° = horizontal, 90° = vertical.",
+                key="w_angle",
+            )
+
+            st.subheader("Wave Influence")
+            line_scatter = st.slider(
+                "Scatter", 0.0, 0.4, D["line_scatter"], step=0.01, format="%.2f",
+                help="Spread line centres off the wave. 0 = all centres exactly on the wave.",
+                key="w_scatter",
+            )
+            angle_spread = st.slider(
+                "Angle variation", 0.0, 1.5, D["angle_spread"], step=0.05, format="%.2f",
+                help="Angular randomness around the perpendicular (radians). 0 = all lines parallel.",
+                key="w_angle_spread",
+            )
+
+            st.subheader("Stroke")
+            sw_min, sw_max = st.slider(
+                "Width range (px)", 0.5, 20.0,
+                (D["stroke_width_min"], D["stroke_width_max"]),
+                step=0.5, key="w_sw",
+            )
+            alpha_min, alpha_max = st.slider(
+                "Opacity range (0-255)", 0, 255,
+                (D["alpha_min"], D["alpha_max"]),
+                key="w_alpha",
+            )
+            invert_overlap = st.toggle(
+                "Invert overlap", value=D["invert_overlap"],
+                help="Each line inverts the tone beneath it.",
+                key="w_invert",
+            )
+            flow_steps = 1  # not applicable
+
+        elif gen_type == "Pendulum":
+            D = gen_pendulum.DEFAULTS
+
+            st.subheader("Pendulum")
+            precession = st.slider(
+                "Precession", 0.01, 0.5, D["precession"], step=0.01, format="%.2f",
+                help="How fast the orbit rotates. Lower = more petals (≈1/value). 0.1 → ~10 petals, 0.33 → ~3.",
+                key="p_prec",
+            )
+            aspect = st.slider(
+                "Shape", 0.1, 1.0, D["aspect"], step=0.05, format="%.2f",
+                help="1.0 = circular orbit, lower = squashed — makes petals more elongated.",
+                key="p_aspect",
+            )
+            phase = st.slider(
+                "Phase", 0.0, 1.0, D["phase"], step=0.05, format="%.2f",
+                help="Starting offset between x and y. 0.25 = circular start, 0 = straight-line start.",
+                key="p_phase",
+            )
+            amplitude = st.slider(
+                "Amplitude", 0.3, 1.0, D["amplitude"], step=0.05, format="%.2f",
+                help="Initial swing size as a fraction of the canvas.",
+                key="p_amp",
+            )
+
+            st.subheader("Paint")
+            damping = st.slider(
+                "Damping", 0.0001, 0.002, D["damping"], step=0.0001, format="%.4f",
+                help="How quickly the swing decays — tighter spiral at higher values.",
+                key="p_damp",
+            )
+            n_steps = st.slider(
+                "Steps", 1, 50000, min(D["n_steps"], 50000), step=100,
+                help="Simulation length — more steps draw more loops of the pattern.",
+                key="p_steps",
+            )
+            flow_rate = st.slider(
+                "Flow rate", 0.0, 2.0, D["flow_rate"], step=0.1, format="%.1f",
+                help="How quickly opacity fades as the pot empties. 0=constant ink.",
+                key="p_flow",
+            )
+
+            st.subheader("Stroke")
+            stroke_width = st.slider(
+                "Width (px)", 0.5, 20.0, D["stroke_width"], step=0.5,
+                key="p_sw",
+            )
+            p_alpha_max = st.slider(
+                "Opacity start (0-255)", 0, 255, D["alpha_max"],
+                help="Opacity at the beginning of the trace.",
+                key="p_alpha_max",
+            )
+            p_alpha_min = st.slider(
+                "Opacity end (0-255)", 0, 255, D["alpha_min"],
+                help="Opacity at the end of the trace (pot nearly empty).",
+                key="p_alpha_min",
+            )
+
+        elif gen_type == "Shapes":
+            D = gen_shapes.DEFAULTS
+
+            st.subheader("Shape mix")
+            n_circles   = st.slider("Circles",   0, 3000, D["n_circles"],   step=10, key="sh_circles")
+            n_triangles = st.slider("Triangles", 0, 3000, D["n_triangles"], step=10, key="sh_triangles")
+            n_squares   = st.slider("Squares",   0, 3000, D["n_squares"],   step=10, key="sh_squares")
+
+            st.subheader("Size")
+            size_median = st.slider(
+                "Size median (px)", 1, 2000, int(D["size_median"]), key="sh_size_med",
+            )
+            size_spread = st.slider(
+                "Size variation", 0.1, 3.0, D["size_spread"], step=0.05, format="%.2f",
+                key="sh_size_spread",
+            )
+            rotation = st.slider(
+                "Rotation", 0.0, 1.0, D["rotation"], step=0.05, format="%.2f",
+                help="0 = all axis-aligned, 1 = fully random per-shape rotation.",
+                key="sh_rotation",
+            )
+
+            st.subheader("Noise")
+            noise_scale = st.slider(
+                "Noise scale", 0.001, 0.02, D["noise_scale"], step=0.001, format="%.3f",
+                help="Spatial frequency of the size-modulation field.",
+                key="sh_noise_scale",
+            )
+            noise_influence = st.slider(
+                "Noise influence", 0.0, 1.0, D["noise_influence"], step=0.05, format="%.2f",
+                help="How strongly noise modulates size. 0 = pure log-normal.",
+                key="sh_noise_inf",
+            )
+
+            st.subheader("Style")
+            filled = st.toggle("Filled", value=D["filled"], key="sh_filled")
+            stroke_w = st.slider(
+                "Stroke width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="sh_stroke",
+            )
+            alpha_min, alpha_max = st.slider(
+                "Opacity range (0-255)", 0, 255,
+                (D["alpha_min"], D["alpha_max"]),
+                key="sh_alpha",
+            )
+            invert_overlap = st.toggle(
+                "Invert overlap", value=D["invert_overlap"],
+                help="Each shape inverts the tone beneath it.",
+                key="sh_invert",
+            )
+
+        elif gen_type == "Attractor":
+            D = gen_attractor.DEFAULTS
+
+            st.subheader("Attractor")
+            attractor_type = st.selectbox(
+                "Type", ["Clifford", "De Jong", "Svensson", "Ikeda", "Hopalong"],
+                index=["clifford", "dejong", "svensson", "ikeda", "hopalong"].index(D["attractor"]),
+                key="at_type",
+                on_change=_reset_attractor_params,
+            )
+            n_iter = st.slider(
+                "Iterations", 500_000, 8_000_000, D["n_iter"], step=500_000,
+                help="More iterations = denser, smoother pattern. Scales down automatically for previews.",
+                key="at_iter",
+            )
+
+            _at_kind = attractor_type.lower().replace(" ", "").replace("_", "")
+            _ik = _AT_PARAMS["ikeda"]
+            st.subheader("Parameters")
+            if _at_kind == "ikeda":
+                # Ikeda is intrinsically 1-param; b/c/d use canonical values that keep the map chaotic
+                a = st.slider("a  (= u)", 0.68, 0.90, _ik["a"], step=0.01, format="%.2f", key="at_a",
+                              help="Contraction ratio — entire range produces chaotic spirals.")
+                b, c, d = _ik["b"], _ik["c"], _ik["d"]
+            else:
+                a = st.slider("a", -3.0, 3.0, D["a"], step=0.05, format="%.2f", key="at_a")
+                b = st.slider("b", -3.0, 3.0, D["b"], step=0.05, format="%.2f", key="at_b")
+                c = st.slider("c", -3.0, 3.0, D["c"], step=0.05, format="%.2f", key="at_c")
+                d = st.slider("d", -3.0, 3.0, D["d"], step=0.05, format="%.2f", key="at_d",
+                              help="Not used by Hopalong." if _at_kind == "hopalong" else None)
+
+            st.subheader("Tone")
+            gamma = st.slider(
+                "Gamma", 0.1, 2.0, D["gamma"], step=0.05, format="%.2f",
+                help="< 1 brightens midtones (dusty), > 1 darkens them (high-contrast).",
+                key="at_gamma",
+            )
+
+        elif gen_type == "Streamlines":
+            D = gen_streamlines.DEFAULTS
+
+            st.subheader("Flow")
+            n_lines = st.slider("Streams", 1, 1000, D["n_lines"], step=1, key="sl_count")
+            n_steps = st.slider(
+                "Steps", 10, 5000, D["n_steps"], step=10,
+                help="How far each stream travels. More steps = longer, more winding paths.",
+                key="sl_steps",
+            )
+            step_size = st.slider(
+                "Step size (px)", 0.5, 50.0, D["step_size"], step=0.5, format="%.1f",
+                help="Distance moved each step. Larger = faster but coarser curves.",
+                key="sl_step_size",
+            )
+
+            st.subheader("Field")
+            noise_scale = st.slider(
+                "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
+                help="Low = sweeping river-like paths. High = chaotic turbulence.",
+                key="sl_noise_scale",
+            )
+            angle_range = st.slider(
+                "Angle range (x 2pi)", 0.05, 1.0, D["angle_range"], step=0.05, format="%.2f",
+                help="1.0 = any direction; 0.25 = constrained to a quadrant.",
+                key="sl_angle_range",
+            )
+
+            st.subheader("Stroke")
+            stroke_width = st.slider("Width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="sl_sw")
+            alpha_max = st.slider(
+                "Opacity start (0-255)", 0, 255, D["alpha_max"],
+                help="Opacity at the start of each stream (freshest ink).",
+                key="sl_alpha_max",
+            )
+            alpha_min = st.slider(
+                "Opacity end (0-255)", 0, 255, D["alpha_min"],
+                help="Opacity at the end of each stream (ink thinning).",
+                key="sl_alpha_min",
+            )
+
+        elif gen_type == "Voronoi":
+            D = gen_voronoi.DEFAULTS
+
+            st.subheader("Cells")
+            n_cells = st.slider("Cell count", 1, 3000, D["n_cells"], step=1, key="vo_count")
+
+            st.subheader("Noise")
+            noise_scale = st.slider(
+                "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
+                help="Spatial scale of the density field. Low = large blobs, high = fine grain.",
+                key="vo_noise_scale",
+            )
+            noise_influence = st.slider(
+                "Noise influence", 0.0, 1.5, D["noise_influence"], step=0.05, format="%.2f",
+                help="How strongly the field modulates cell shading. 0 = uniform.",
+                key="vo_noise_inf",
+            )
+
+            st.subheader("Style")
+            filled = st.toggle("Filled cells", value=D["filled"],
+                               help="Off = outlines only (cracked-earth look).", key="vo_filled")
+            stroke_w = st.slider("Outline width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="vo_stroke")
+            alpha_min, alpha_max = st.slider(
+                "Opacity range (0-255)", 0, 255,
+                (D["alpha_min"], D["alpha_max"]),
+                key="vo_alpha",
+            )
+
+        elif gen_type == "Cubes":
+            D = gen_cubes.DEFAULTS
+
+            st.subheader("Cubes")
+            n_cubes      = st.slider("Count", 1, 2000, D["n_cubes"], step=1, key="cu_count")
+            size_median  = st.slider("Size median (px)", 1, 2000, int(D["size_median"]), key="cu_size_med")
+            size_spread  = st.slider(
+                "Size variation", 0.1, 3.0, D["size_spread"], step=0.05, format="%.2f",
+                key="cu_size_spread",
+            )
+
+            st.subheader("Noise")
+            noise_scale = st.slider(
+                "Noise scale", 0.0005, 0.02, D["noise_scale"], step=0.0005, format="%.4f",
+                help="Spatial scale of size clustering. Low = large blobs, high = fine grain.",
+                key="cu_noise_scale",
+            )
+            noise_influence = st.slider(
+                "Noise influence", 0.0, 1.5, D["noise_influence"], step=0.05, format="%.2f",
+                help="How strongly noise modulates cube size. 0 = pure random.",
+                key="cu_noise_inf",
+            )
+
+            st.subheader("Style")
+            filled = st.toggle("Filled", value=D["filled"], key="cu_filled")
+            stroke_w = st.slider("Outline width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="cu_stroke")
+            alpha_min, alpha_max = st.slider(
+                "Opacity range (0-255)", 0, 255,
+                (D["alpha_min"], D["alpha_max"]),
+                key="cu_alpha",
+            )
+            shade_contrast = st.slider(
+                "Shade contrast", 0.0, 1.0, D["shade_contrast"], step=0.05, format="%.2f",
+                help="How different the three face shades are. 0 = flat, 1 = strong light/shadow.",
+                key="cu_shade",
+            )
+
+            st.subheader("Warp")
+            cu_warp_label = st.selectbox(
+                "Warp type", ["None", "Wave", "Sphere"],
+                index=0,
+                help="Displaces each vertex by an invisible field, bending the cube faces.",
+                key="cu_warp_type",
+            )
+            warp_type = cu_warp_label.lower()
+            if warp_type != "none":
+                warp_amplitude = st.slider(
+                    "Warp amplitude", 0.0, 1.0, D["warp_amplitude"], step=0.05, format="%.2f",
+                    help="Displacement strength as a fraction of cube size.",
+                    key="cu_warp_amp",
+                )
+                warp_scale = st.slider(
+                    "Warp scale", 0.001, 0.02, D["warp_scale"], step=0.001, format="%.3f",
+                    help="Wave: spatial frequency. Sphere: falloff rate from canvas centre.",
+                    key="cu_warp_scale",
+                )
+            else:
+                warp_amplitude = 0.0
+                warp_scale = D["warp_scale"]
+
+        elif gen_type == "Spirograph":
+            D = gen_spirograph.DEFAULTS
+
+            st.subheader("Gears")
+            spiro_mode = st.selectbox(
+                "Type", ["Hypo (inner rolling)", "Epi (outer rolling)"],
+                index=0 if D["mode"] == "hypo" else 1,
+                key="sp_mode",
+            )
+            R_val = st.slider("Outer radius R", 2, 50, int(D["R"]), step=1,
+                              help="Fixed gear radius. Number of petals ≈ R / gcd(R, r).",
+                              key="sp_R")
+            r_val = st.slider("Inner radius r", 1, 30, int(D["r"]), step=1,
+                              help="Rolling gear radius. Curve closes after r / gcd(R, r) loops.",
+                              key="sp_r")
+            d_val = st.slider(
+                "Pen distance d", 0.5, 50.0, float(D["d"]), step=0.5, format="%.1f",
+                help="Distance of pen from rolling gear center. d = r gives a classic hypocycloid.",
+                key="sp_d",
+            )
+
+            st.subheader("Trace")
+            n_repeats = st.slider(
+                "Repeats", 1, 10, D["n_repeats"], step=1,
+                help="Retrace the closed pattern this many times for a layered, denser look.",
+                key="sp_repeats",
+            )
+
+            st.subheader("Stroke")
+            stroke_width = st.slider("Width (px)", 0.5, 20.0, D["stroke_width"], step=0.5, key="sp_sw")
+            sp_alpha_max = st.slider("Opacity start (0-255)", 0, 255, D["alpha_max"],
+                                     help="Opacity at the start of the trace.", key="sp_alpha_max")
+            sp_alpha_min = st.slider("Opacity end (0-255)", 0, 255, D["alpha_min"],
+                                     help="Opacity at the end of the trace.", key="sp_alpha_min")
+
+        # ── Stroke Character (shared, stroke-based generators only) ──────────────
+        _STROKE_TYPES = {"Lines", "Wave", "Streamlines", "Pendulum", "Spirograph"}
+        if gen_type in _STROKE_TYPES:
+            st.subheader("Stroke Character")
+            stroke_taper = st.slider(
+                "End taper", 0.0, 1.0, float(defaults.get("stroke_taper", 0.0)),
+                step=0.05, key="sc_taper",
+                help="Narrows stroke width at both ends of each stroke.",
+            )
+            stroke_width_var = st.slider(
+                "Width variation", 0.0, 1.0, float(defaults.get("stroke_width_var", 0.0)),
+                step=0.05, key="sc_wvar",
+                help="Random per-stroke width jitter for a hand-drawn rhythm.",
+            )
+            stroke_break_density = st.slider(
+                "Break density", 0.0, 1.0, float(defaults.get("stroke_break_density", 0.0)),
+                step=0.02, key="sc_break",
+                help="Fraction of strokes/segments randomly omitted (dry-brush gaps).",
+            )
+            stroke_roughness = st.slider(
+                "Roughness", 0.0, 5.0, float(defaults.get("stroke_roughness", 0.0)),
+                step=0.1, key="sc_rough",
+                help="Perpendicular wobble amplitude (× stroke width) for hand-tremor feel.",
+            )
+        else:
+            stroke_taper = stroke_width_var = stroke_break_density = stroke_roughness = 0.0
+
+        # ── Composition (shared) ──────────────────────────────────────────────────
+        st.subheader("Composition")
+        margin = st.slider(
+            "Edge margin", 0.0, 0.45, defaults["margin"],
+            step=0.01, format="%.2f",
+            help="Fraction of the image to leave empty at each edge.",
+            key="shared_margin",
+        )
+        _GRAVITY_TYPES = {"Lines", "Circles", "Wave", "Shapes", "Streamlines", "Voronoi", "Cubes"}
+        if gen_type in _GRAVITY_TYPES:
+            gravity = st.slider(
+                "Gravity strength", 0.0, 0.95, defaults["gravity"],
+                step=0.05, format="%.2f",
+                help="How strongly marks are pulled toward the centre.",
+                key="shared_gravity",
+            )
+            gravity_falloff = st.slider(
+                "Gravity falloff", 0.0, 1.0, defaults["gravity_falloff"],
+                step=0.05, format="%.2f",
+                help="How quickly gravity weakens with distance. 0 = uniform pull everywhere, 1 = only nearby marks affected.",
+                key="shared_gravity_falloff",
+            )
+        else:
+            gravity = gravity_falloff = 0.0
+
+        # ── Warp field (shared) ───────────────────────────────────────────────────
+        st.subheader("Warp")
+        warp_type = st.selectbox(
+            "Type", ["None", "Noise", "Swirl", "Ripple", "Radial"],
+            key="w_type",
+        ).lower()
+        if warp_type != "none":
+            warp_strength = st.slider(
+                "Strength", 0, 300,
+                int(gen_warp.DEFAULTS["strength"]),
+                step=1, key="w_strength",
+                help="Maximum pixel displacement (Noise / Ripple / Swirl) or lens scale (Radial).",
+            )
+            if warp_type == "noise":
+                warp_noise_scale = st.slider(
+                    "Field scale", 0.001, 0.015,
+                    gen_warp.DEFAULTS["noise_scale"],
+                    step=0.001, format="%.3f", key="w_ns",
+                    help="Spatial scale of the noise pattern. Lower = larger blobs.",
+                )
+                warp_seed = st.number_input("Seed", 0, 99999, gen_warp.DEFAULTS["seed"], key="w_seed")
+            elif warp_type == "swirl":
+                warp_falloff = st.slider(
+                    "Falloff", 0.0, 1.0, gen_warp.DEFAULTS["falloff"],
+                    step=0.05, format="%.2f", key="w_falloff",
+                    help="0 = hard vortex edge, 1 = very gradual fade to zero.",
+                )
+            elif warp_type == "ripple":
+                warp_frequency = st.slider(
+                    "Frequency", 0.5, 20.0, gen_warp.DEFAULTS["frequency"],
+                    step=0.5, format="%.1f", key="w_freq",
+                    help="Number of wave cycles across the short canvas edge.",
+                )
+                warp_angle = st.slider(
+                    "Direction", 0, 360, int(gen_warp.DEFAULTS["angle"]),
+                    step=5, key="w_angle",
+                    help="Wave propagation direction in degrees.",
+                )
+            # Radial: strength alone controls barrel (<0) vs pincushion (>0) intensity
+        else:
+            warp_strength = warp_noise_scale = warp_seed = 0
+            warp_falloff = warp_frequency = warp_angle = 0
+
+        warp_cfg = {
+            "warp_type":  warp_type,
+            "strength":   float(warp_strength) if warp_type != "none" else 0.0,
+            "noise_scale": float(warp_noise_scale) if warp_type == "noise" else gen_warp.DEFAULTS["noise_scale"],
+            "seed":        int(warp_seed)       if warp_type == "noise" else gen_warp.DEFAULTS["seed"],
+            "falloff":     float(warp_falloff)  if warp_type == "swirl"  else gen_warp.DEFAULTS["falloff"],
+            "frequency":   float(warp_frequency) if warp_type == "ripple" else gen_warp.DEFAULTS["frequency"],
+            "angle":       float(warp_angle)    if warp_type == "ripple" else gen_warp.DEFAULTS["angle"],
+        }
+
+        # ── Mood / Color & Output (shared) ────────────────────────────────────────
+        st.subheader("Mood & Output")
+        col_mood, col_reroll = st.columns([3, 1])
+        with col_mood:
+            mood = st.selectbox(
+                "Mood",
+                list(_MOOD_LABELS.keys()),
+                format_func=_MOOD_LABELS.get,
+                key="shared_mood",
+                on_change=_reroll_colours,
+            )
+        with col_reroll:
+            st.markdown("<div style='padding-top:1.75rem'>", unsafe_allow_html=True)
+            if st.button("Re-roll", key="shared_reroll"):
+                _reroll_colours()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        bg_hex, fg_hex = mood_colors(mood, st.session_state.colour_seed)
+
+        out_w = st.select_slider(
+            "Width (px)", [400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
+            value=2000, key="shared_out_w",
+        )
+        out_h = st.select_slider(
+            "Height (px)", [300, 400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000],
+            value=2000, key="shared_out_h",
+        )
+
+        st.divider()
+        render_full = st.button("Download full resolution", type="primary")
+
+
+    # ── Assemble config ────────────────────────────────────────────────────────────
+
+    if gen_type == "Lines":
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "n_lines": n_lines,
+            "noise_scale": noise_scale, "angle_range": angle_range,
+            "length_median": float(length_median), "length_spread": float(length_spread),
+            "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+            "stroke_width_min": sw_min, "stroke_width_max": sw_max,
+            "alpha_min": alpha_min, "alpha_max": alpha_max,
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+            "flow_steps": flow_steps,
+            "invert_overlap": invert_overlap,
+            "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+            "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
+        }
+        label = "lines"
+    elif gen_type == "Wave":
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "n_lines": n_lines,
+            "wave_amplitude": float(wave_amplitude),
+            "wave_frequency": float(wave_frequency),
+            "wave_phase": float(wave_phase),
+            "wave_angle": float(wave_angle),
+            "line_scatter": float(line_scatter),
+            "angle_spread": float(angle_spread),
+            "length_median": float(length_median), "length_spread": float(length_spread),
+            "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+            "stroke_width_min": sw_min, "stroke_width_max": sw_max,
+            "alpha_min": alpha_min, "alpha_max": alpha_max,
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+            "invert_overlap": invert_overlap,
+            "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+            "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
+        }
+        label = "wave"
+    elif gen_type == "Pendulum":
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "precession": float(precession),
+            "aspect": float(aspect),
+            "phase": float(phase),
+            "damping": float(damping),
+            "n_steps": int(n_steps),
+            "amplitude": float(amplitude),
+            "flow_rate": float(flow_rate),
+            "stroke_width": float(stroke_width),
+            "alpha_max": int(p_alpha_max),
+            "alpha_min": int(p_alpha_min),
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+            "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+            "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
+        }
+        label = "pendulum"
+    elif gen_type == "Shapes":
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "n_circles": int(n_circles), "n_triangles": int(n_triangles), "n_squares": int(n_squares),
+            "size_median": float(size_median), "size_spread": float(size_spread),
+            "rotation": float(rotation),
+            "noise_scale": float(noise_scale), "noise_influence": float(noise_influence),
+            "filled": filled, "stroke_width": float(stroke_w),
+            "alpha_min": int(alpha_min), "alpha_max": int(alpha_max),
+            "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+            "invert_overlap": invert_overlap,
+        }
+        label = "shapes"
+    elif gen_type == "Attractor":
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "attractor": attractor_type.lower().replace(" ", ""),
+            "a": float(a), "b": float(b), "c": float(c), "d": float(d),
+            "n_iter": int(n_iter),
+            "gamma": float(gamma),
+            "margin": 0.0, "gravity": 0.0, "gravity_falloff": 0.0,
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+        }
+        label = "attractor"
+    elif gen_type == "Streamlines":
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "n_lines": int(n_lines),
+            "n_steps": int(n_steps),
+            "step_size": float(step_size),
+            "noise_scale": float(noise_scale),
+            "angle_range": float(angle_range),
+            "stroke_width": float(stroke_width),
+            "alpha_max": int(alpha_max),
+            "alpha_min": int(alpha_min),
+            "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+            "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+            "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
+        }
+        label = "streamlines"
+    elif gen_type == "Voronoi":
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "n_cells": int(n_cells),
+            "noise_scale": float(noise_scale),
+            "noise_influence": float(noise_influence),
+            "filled": filled,
+            "stroke_width": float(stroke_w),
+            "alpha_min": int(alpha_min), "alpha_max": int(alpha_max),
+            "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+        }
+        label = "voronoi"
+    elif gen_type == "Cubes":
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "n_cubes": int(n_cubes),
+            "size_median": float(size_median), "size_spread": float(size_spread),
+            "noise_scale": float(noise_scale), "noise_influence": float(noise_influence),
+            "filled": filled, "stroke_width": float(stroke_w),
+            "alpha_min": int(alpha_min), "alpha_max": int(alpha_max),
+            "shade_contrast": float(shade_contrast),
+            "warp_type": warp_type, "warp_amplitude": float(warp_amplitude), "warp_scale": float(warp_scale),
+            "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+        }
+        label = "cubes"
+    elif gen_type == "Spirograph":
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "R": int(R_val), "r": int(r_val), "d": float(d_val),
+            "mode": "hypo" if spiro_mode.startswith("Hypo") else "epi",
+            "n_repeats": int(n_repeats),
+            "stroke_width": float(stroke_width),
+            "alpha_max": int(sp_alpha_max), "alpha_min": int(sp_alpha_min),
+            "margin": float(margin), "gravity": 0.0, "gravity_falloff": 0.0,
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+            "stroke_taper": float(stroke_taper), "stroke_width_var": float(stroke_width_var),
+            "stroke_break_density": float(stroke_break_density), "stroke_roughness": float(stroke_roughness),
+        }
+        label = "spirograph"
+    else:
+        config = {
+            "seed": int(seed),
+            "output_width": out_w, "output_height": out_h,
+            "n_circles": n_circles,
+            "noise_scale": noise_scale, "noise_influence": float(noise_influence),
+            "radius_median": float(radius_median), "radius_spread": float(radius_spread),
+            "margin": float(margin), "gravity": float(gravity), "gravity_falloff": float(gravity_falloff),
+            "filled": filled, "stroke_width": stroke_w,
+            "alpha_min": alpha_min, "alpha_max": alpha_max,
+            "bg_hex": bg_hex, "fg_hex": fg_hex,
+            "invert_overlap": invert_overlap,
+        }
+        label = "circles"
+
+
+    # ── Render preview ─────────────────────────────────────────────────────────────
+
+    PREVIEW_MAX_W = 900
+    preview_scale = min(PREVIEW_MAX_W / out_w, 1.0)
+    key      = _cfg_key(config)
+    warp_key = _cfg_key(warp_cfg)
+
     base_bytes    = _render_base(gen_type, key, preview_scale)
     preview_bytes = _render_warped(base_bytes, warp_key, preview_scale)
 
-preview_img = Image.open(io.BytesIO(preview_bytes))
-img_placeholder.image(preview_img, width="stretch")
-caption_placeholder.markdown('<hr style="margin:0;border:none;border-top:1px solid rgba(128,128,128,0.2);">', unsafe_allow_html=True)
+    preview_img = Image.open(io.BytesIO(preview_bytes))
+    img_placeholder.image(preview_img, width="stretch")
+    caption_placeholder.markdown('<hr style="margin:0;border:none;border-top:1px solid rgba(128,128,128,0.2);">', unsafe_allow_html=True)
 
-# ── Export ─────────────────────────────────────────────────────────────────────
+    # ── Export ─────────────────────────────────────────────────────────────────────
 
-if render_full:
-    with st.spinner(f"Rendering {out_w}x{out_h} px..."):
-        full_base  = _render_base(gen_type, key, 1.0)
-        full_bytes = _render_warped(full_base, warp_key, 1.0)
-    st.download_button(
-        "Download PNG",
-        data=full_bytes,
-        file_name=f"scattered_{label}.png",
-        mime="image/png",
-    )
+    if render_full:
+        with st.spinner(f"Rendering {out_w}x{out_h} px..."):
+            full_base  = _render_base(gen_type, key, 1.0)
+            full_bytes = _render_warped(full_base, warp_key, 1.0)
+        st.download_button(
+            "Download PNG",
+            data=full_bytes,
+            file_name=f"scattered_{label}.png",
+            mime="image/png",
+        )
 
-# ── Slider direct-entry (double-click or long-press) ──────────────────────────
+    # ── Slider direct-entry (double-click or long-press) ──────────────────────────
 
-components.html("""
-<!DOCTYPE html><html><body><script>
-(function(){
-  try {
-    var pd = parent.document;
-    if(parent._svDone) return;
-    parent._svDone = true;
+    components.html("""
+    <!DOCTYPE html><html><body><script>
+    (function(){
+      try {
+        var pd = parent.document;
+        if(parent._svDone) return;
+        parent._svDone = true;
 
-    var lpt = null;
-    var awayHandler = null;
+        // Suppress Streamlit's rerun flash: watch for any opacity<1 applied to
+        // the main content area and immediately reset it to 1.
+        (function(){
+          var main = pd.querySelector('[data-testid="stMain"]');
+          if(!main) return;
+          var mo = new MutationObserver(function(muts){
+            muts.forEach(function(m){
+              var el = m.target;
+              if(el.style && el.style.opacity && parseFloat(el.style.opacity) < 1){
+                el.style.opacity = '1';
+              }
+            });
+          });
+          mo.observe(main, { subtree:true, attributes:true, attributeFilter:['style'] });
+        })();
 
-    function setViaReact(thumb, v){
-      var fkey = Object.keys(thumb).find(function(k){
-        return k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance');
-      });
-      if(!fkey) return false;
-      var node = thumb[fkey];
-      while(node){
-        var p = node.memoizedProps;
-        if(p && typeof p.onChange === 'function'){ p.onChange([v]); return true; }
-        node = node.return;
+        var lpt = null;
+        var awayHandler = null;
+
+        function setViaReact(thumb, v){
+          var fkey = Object.keys(thumb).find(function(k){
+            return k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance');
+          });
+          if(!fkey) return false;
+          var node = thumb[fkey];
+          while(node){
+            var p = node.memoizedProps;
+            if(p && typeof p.onChange === 'function'){ p.onChange([v]); return true; }
+            node = node.return;
+          }
+          return false;
+        }
+
+        function setViaPointer(thumb, v, min, max){
+          var track = thumb.closest('[data-baseweb="slider"]') || thumb.parentElement;
+          var tr = track.getBoundingClientRect();
+          var fraction = (v - min) / (max - min);
+          var cx = tr.left + fraction * tr.width;
+          var cy = tr.top + tr.height / 2;
+          var target = pd.elementFromPoint(cx, cy) || track;
+          var opts = { bubbles:true, cancelable:true, clientX:cx, clientY:cy, pointerId:1, isPrimary:true };
+          target.dispatchEvent(new PointerEvent('pointerdown', opts));
+          pd.dispatchEvent(new PointerEvent('pointermove', opts));
+          pd.dispatchEvent(new PointerEvent('pointerup', opts));
+        }
+
+        function closeOverlay(){
+          var o = pd.getElementById('__svo');
+          if(o) o.remove();
+          if(awayHandler){ pd.removeEventListener('pointerdown', awayHandler, true); awayHandler=null; }
+        }
+
+        function show(el){
+          var thumb = el.querySelector('[role="slider"]');
+          if(!thumb) return;
+          var min = parseFloat(thumb.getAttribute('aria-valuemin'));
+          var max = parseFloat(thumb.getAttribute('aria-valuemax'));
+          var cur = parseFloat(thumb.getAttribute('aria-valuenow'));
+
+          closeOverlay();
+
+          var tr = thumb.getBoundingClientRect();
+          var ovW = 130;
+          var left = Math.min(Math.max(4, tr.left + tr.width/2 - ovW/2), parent.innerWidth - ovW - 4);
+          var top  = tr.top > 54 ? tr.top - 46 : tr.bottom + 8;
+
+          var ov = pd.createElement('div');
+          ov.id = '__svo';
+          ov.style.cssText = 'position:fixed;left:'+left+'px;top:'+top+'px;background:#1a1a2a;border:1px solid rgba(255,255,255,0.25);border-radius:6px;padding:5px 10px;z-index:2147483647;box-shadow:0 4px 20px rgba(0,0,0,0.6)';
+          var ni = pd.createElement('input');
+          ni.type='number'; ni.value=cur; ni.min=min; ni.max=max;
+          ni.style.cssText='width:110px;background:transparent;border:none;color:white;font-size:0.9rem;outline:none';
+          ov.appendChild(ni);
+          pd.body.appendChild(ov);
+
+          // Delay focus so slider's own handlers finish first
+          setTimeout(function(){ ni.focus(); ni.select(); }, 50);
+
+          function apply(){
+            var v = parseFloat(ni.value);
+            if(isNaN(v)){ closeOverlay(); return; }
+            v = Math.min(max, Math.max(min, v));
+            closeOverlay();
+            if(!setViaReact(thumb, v)) setViaPointer(thumb, v, min, max);
+          }
+
+          ni.addEventListener('keydown', function(e){
+            if(e.key==='Enter'){ apply(); e.preventDefault(); }
+            if(e.key==='Escape'){ closeOverlay(); e.preventDefault(); }
+            e.stopPropagation();
+          }, true);
+
+          // Close on click-away; delay 300ms so this dblclick doesn't immediately trigger it
+          awayHandler = function(e){
+            if(!ov.contains(e.target)) closeOverlay();
+          };
+          setTimeout(function(){
+            if(awayHandler) pd.addEventListener('pointerdown', awayHandler, true);
+          }, 300);
+        }
+
+        pd.addEventListener('dblclick', function(e){
+          var s = e.target.closest('[data-testid="stSlider"]');
+          if(s){ e.preventDefault(); e.stopPropagation(); show(s); }
+        }, true);
+        pd.addEventListener('pointerdown', function(e){
+          var s = e.target.closest('[data-testid="stSlider"]');
+          if(s) lpt = setTimeout(function(){ show(s); }, 650);
+        }, true);
+        function cancel(){ if(lpt){ clearTimeout(lpt); lpt=null; } }
+        pd.addEventListener('pointerup', cancel, true);
+        pd.addEventListener('pointermove', cancel, {passive:true, capture:true});
+
+      } catch(e){
+        console.error('slider-input error:', e);
       }
-      return false;
-    }
+    })();
+    </script></body></html>
+    """, height=0, scrolling=False)
 
-    function setViaPointer(thumb, v, min, max){
-      var track = thumb.closest('[data-baseweb="slider"]') || thumb.parentElement;
-      var tr = track.getBoundingClientRect();
-      var fraction = (v - min) / (max - min);
-      var cx = tr.left + fraction * tr.width;
-      var cy = tr.top + tr.height / 2;
-      var target = pd.elementFromPoint(cx, cy) || track;
-      var opts = { bubbles:true, cancelable:true, clientX:cx, clientY:cy, pointerId:1, isPrimary:true };
-      target.dispatchEvent(new PointerEvent('pointerdown', opts));
-      pd.dispatchEvent(new PointerEvent('pointermove', opts));
-      pd.dispatchEvent(new PointerEvent('pointerup', opts));
-    }
-
-    function closeOverlay(){
-      var o = pd.getElementById('__svo');
-      if(o) o.remove();
-      if(awayHandler){ pd.removeEventListener('pointerdown', awayHandler, true); awayHandler=null; }
-    }
-
-    function show(el){
-      var thumb = el.querySelector('[role="slider"]');
-      if(!thumb) return;
-      var min = parseFloat(thumb.getAttribute('aria-valuemin'));
-      var max = parseFloat(thumb.getAttribute('aria-valuemax'));
-      var cur = parseFloat(thumb.getAttribute('aria-valuenow'));
-
-      closeOverlay();
-
-      var tr = thumb.getBoundingClientRect();
-      var ovW = 130;
-      var left = Math.min(Math.max(4, tr.left + tr.width/2 - ovW/2), parent.innerWidth - ovW - 4);
-      var top  = tr.top > 54 ? tr.top - 46 : tr.bottom + 8;
-
-      var ov = pd.createElement('div');
-      ov.id = '__svo';
-      ov.style.cssText = 'position:fixed;left:'+left+'px;top:'+top+'px;background:#1a1a2a;border:1px solid rgba(255,255,255,0.25);border-radius:6px;padding:5px 10px;z-index:2147483647;box-shadow:0 4px 20px rgba(0,0,0,0.6)';
-      var ni = pd.createElement('input');
-      ni.type='number'; ni.value=cur; ni.min=min; ni.max=max;
-      ni.style.cssText='width:110px;background:transparent;border:none;color:white;font-size:0.9rem;outline:none';
-      ov.appendChild(ni);
-      pd.body.appendChild(ov);
-
-      // Delay focus so slider's own handlers finish first
-      setTimeout(function(){ ni.focus(); ni.select(); }, 50);
-
-      function apply(){
-        var v = parseFloat(ni.value);
-        if(isNaN(v)){ closeOverlay(); return; }
-        v = Math.min(max, Math.max(min, v));
-        closeOverlay();
-        if(!setViaReact(thumb, v)) setViaPointer(thumb, v, min, max);
-      }
-
-      ni.addEventListener('keydown', function(e){
-        if(e.key==='Enter'){ apply(); e.preventDefault(); }
-        if(e.key==='Escape'){ closeOverlay(); e.preventDefault(); }
-        e.stopPropagation();
-      }, true);
-
-      // Close on click-away; delay 300ms so this dblclick doesn't immediately trigger it
-      awayHandler = function(e){
-        if(!ov.contains(e.target)) closeOverlay();
-      };
-      setTimeout(function(){
-        if(awayHandler) pd.addEventListener('pointerdown', awayHandler, true);
-      }, 300);
-    }
-
-    pd.addEventListener('dblclick', function(e){
-      var s = e.target.closest('[data-testid="stSlider"]');
-      if(s){ e.preventDefault(); e.stopPropagation(); show(s); }
-    }, true);
-    pd.addEventListener('pointerdown', function(e){
-      var s = e.target.closest('[data-testid="stSlider"]');
-      if(s) lpt = setTimeout(function(){ show(s); }, 650);
-    }, true);
-    function cancel(){ if(lpt){ clearTimeout(lpt); lpt=null; } }
-    pd.addEventListener('pointerup', cancel, true);
-    pd.addEventListener('pointermove', cancel, {passive:true, capture:true});
-
-  } catch(e){
-    console.error('slider-input error:', e);
-  }
-})();
-</script></body></html>
-""", height=0, scrolling=False)
+_main_ui()
